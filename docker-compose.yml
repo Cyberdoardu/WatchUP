@@ -1,0 +1,46 @@
+version: '3.8'
+
+services:
+  cassandra:
+    image: cassandra:4.0
+    environment:
+      - CASSANDRA_CLUSTER_NAME=MonitorCluster
+      - CASSANDRA_DC=dc1
+    volumes:
+      - cassandra_data:/var/lib/cassandra
+    networks:
+      - monitor-net
+    ports:
+      - "9042:9042"
+
+  central-server:
+    build: ./Central
+    ports:
+      - "5000:5000"
+    environment:
+      - CASSANDRA_HOSTS=cassandra
+      - CASSANDRA_KEYSPACE=watchup
+      - CASSANDRA_USER=${CASSANDRA_USER}
+      - CASSANDRA_PASSWORD=${CASSANDRA_PASSWORD}
+    depends_on:
+      - cassandra
+    networks:
+      - monitor-net
+
+  monitoring-agent:
+    build: ./Agent
+    environment:
+      - CENTRAL_SERVER_URL=http://central-server:5000
+      - AGENT_NAME=agent-01
+      - CHECK_INTERVAL=30
+    depends_on:
+      - central-server
+    networks:
+      - monitor-net
+
+networks:
+  monitor-net:
+    driver: bridge
+
+volumes:
+  cassandra_data: 
