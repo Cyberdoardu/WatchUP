@@ -1,0 +1,43 @@
+<html>
+    <head>
+        <title>Cadastro do Administrador</title> <!--Só pode ter 1 admin, se já tiver um cadastrado não deixar cadastrar outro-->
+    </head>
+    <body>
+        <div>
+            <h1>Bem-vindo(a) ao WatchUp!</h1>
+            <h2>Crie o primeiro usuário admin</h2>
+            <form id="adminCadastroForm">
+                <input name="username" type="text" placeholder="username"> <br>
+                <input name="nome" type="text" placeholder="nome"> <br>
+                <input name="email" type="text" placeholder="e-mail"> <br>
+                <input name="senha" type="password" placeholder="senha"> <br>
+                <button type="submit">Cadastrar</button>
+            </form>
+        </div>
+        <script>
+            document.getElementById('adminCadastroForm')
+                .addEventListener('submit', e => {
+                    e.preventDefault();
+                    fetch('back/admin-cadastro.php', {
+                        method: 'POST',
+                        body: new FormData(e.target)
+                    })
+                    .then(r => r.json())
+                    .then(response => {
+                        if (response.sucesso) {
+                            alert(response.mensagem);
+                            if (response.redirecionar) {
+                                window.location.href = response.redirecionar;
+                            }
+                        } else {
+                            alert(response.mensagem);
+                        }
+                    })
+                    .catch(error => {
+                        console.error('Erro:', error);
+                        alert('Ocorreu um erro durante o cadastro');
+                    });
+                });
+        </script>       
+    </body>
+</html>
