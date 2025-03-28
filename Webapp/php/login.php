@@ -49,13 +49,10 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
             $_SESSION['usuario_email'] = $usuario['email'];
             $_SESSION['usuario_admin'] = $usuario['admin'];
 
-            // Determina para onde redirecionar baseado no tipo de usuário
-            $redirecionar = $usuario['admin'] ? 'admin-dashboard.html' : 'user-dashboard.html';
-
             echo json_encode([
                 "sucesso" => true,
                 "mensagem" => "Login realizado com sucesso!",
-                "redirecionar" => $redirecionar
+                "redirecionar" => "menu.html"
             ]);
         } else {
             echo json_encode([
