@@ -15,30 +15,24 @@ load_dotenv()
 
 app = Flask(__name__)
 
-# Cassandra Configuration
-auth_provider = PlainTextAuthProvider(
-    username=os.getenv('CASSANDRA_USER', 'cassandra'),
-    password=os.getenv('CASSANDRA_PASSWORD', 'cassandra')
-)
-
-# Configure retry policy
+# Configuração do ScyllaDB
 profile = ExecutionProfile(
-    consistency_level=ConsistencyLevel.LOCAL_ONE
+    consistency_level=ConsistencyLevel.LOCAL_ONE,
+    row_factory=dict_factory
 )
 
-
-# Cluster configuration with connection retries
 cluster = Cluster(
-    contact_points=[os.getenv('CASSANDRA_HOSTS', 'cassandra')],
-    auth_provider=auth_provider,
+    contact_points=[os.getenv('SCYLLA_HOSTS', 'scylladb')],
+    auth_provider=None,  # ScyllaDB não requer autenticação por padrão
     protocol_version=4,
     connect_timeout=30,
-    reconnection_policy=ExponentialReconnectionPolicy(1, 30),  # Movido para cá
+    reconnection_policy=ExponentialReconnectionPolicy(1, 30),
     idle_heartbeat_interval=15,
-    execution_profiles={EXEC_PROFILE_DEFAULT: profile}
+    execution_profiles={EXEC_PROFILE_DEFAULT: profile},  # Agora usando o profile definido
+    compression=True
 )
 
-# Connection retry logic
+# Lógica de tentativa de conexão
 max_retries = 10
 retry_count = 0
 session = None
@@ -49,12 +43,12 @@ while retry_count < max_retries:
         break
     except NoHostAvailable as e:
         retry_count += 1
-        print(f"Connection attempt {retry_count} failed: {str(e)}")
+        print(f"Tentativa de conexão {retry_count} falhou: {str(e)}")
         time.sleep(10)
 else:
-    raise RuntimeError("Failed to connect to Cassandra after multiple attempts")
+    raise RuntimeError("Falha ao conectar ao ScyllaDB após várias tentativas")
 
-# Create Keyspace and Tables
+# Criação do keyspace e tabelas
 session.execute("""
     CREATE KEYSPACE IF NOT EXISTS watchup 
     WITH replication = {'class': 'SimpleStrategy', 'replication_factor': 1}
@@ -80,16 +74,28 @@ session.execute("""
 """)
 
 session.set_keyspace('watchup')
-session.row_factory = dict_factory
 
 def cleanup_inactive_agents():
     while True:
         try:
-            # Remove agents inactive for more than 1 hour
-            session.execute(
-                "DELETE FROM agents WHERE last_seen < %s",
-                (datetime.now() - timedelta(hours=1),)
+            # Query otimizada sem ALLOW FILTERING
+            result = session.execute(
+                "SELECT agent_id FROM agents WHERE status = 'active'"
             )
+            
+            now = datetime.now()
+            for row in result:
+                agent_result = session.execute(
+                    "SELECT last_seen FROM agents WHERE agent_id = %s",
+                    (row['agent_id'],)
+                ).one()
+                
+                if agent_result and (now - agent_result['last_seen']) > timedelta(hours=1):
+                    session.execute(
+                        "DELETE FROM agents WHERE agent_id = %s",
+                        (row['agent_id'],)
+                    )
+                    
         except Exception as e:
             app.logger.error(f"Cleanup error: {str(e)}")
         time.sleep(3600)
@@ -108,21 +114,31 @@ def register_agent():
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
+# Corrigir a rota /heartbeat e adicionar tratamento de erros
 @app.route('/heartbeat', methods=['POST'])
 def receive_heartbeat():
     data = request.json
     agent_id = data['agent_name']
     
     try:
-        result = session.execute(
+        session.execute(
             "UPDATE agents SET last_seen = %s WHERE agent_id = %s",
             (datetime.now(), agent_id)
         )
-        if result:
-            return jsonify({'status': 'acknowledged'})
-        return jsonify({'error': 'Agent not registered'}), 404
+        return jsonify({'status': 'acknowledged'})
     except Exception as e:
+        app.logger.error(f"Erro no heartbeat: {str(e)}")
         return jsonify({'error': str(e)}), 500
+
+# Adicionar endpoint de health check
+@app.route('/health')
+def health_check():
+    try:
+        session.execute("SELECT * FROM system.local")
+        return jsonify({'status': 'healthy'}), 200
+    except Exception as e:
+        return jsonify({'status': 'unhealthy', 'error': str(e)}), 500
+    
 
 @app.route('/metrics', methods=['POST'])
 def receive_metrics():
@@ -168,10 +184,13 @@ def handle_targets():
             (agent_id,)
         ).one()
         
-        return jsonify(result['targets'] if result else [])
+        # Retornar lista vazia se não encontrar resultados
+        return jsonify(result['targets'] if result and result['targets'] else [])
     
     except Exception as e:
+        app.logger.error(f"Targets error: {str(e)}")
         return jsonify({'error': str(e)}), 500
+    
 
 @app.route('/metrics', methods=['GET'])
 def get_metrics():
