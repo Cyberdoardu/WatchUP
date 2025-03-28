@@ -16,7 +16,7 @@
             document.getElementById('loginForm')
                 .addEventListener('submit', e => {
                     e.preventDefault();
-                    fetch('back/login.php', {
+                    fetch('php/login.php', {
                         method: 'POST',
                         body: new FormData(e.target)
                     })

@@ -17,7 +17,7 @@
             document.getElementById('userCadastroForm')
                 .addEventListener('submit', e => {
                     e.preventDefault();
-                    fetch('back/user-cadastro.php', {
+                    fetch('php/user-cadastro.php', {
                         method: 'POST',
                         body: new FormData(e.target)
                     })
