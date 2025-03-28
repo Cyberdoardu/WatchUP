@@ -1,28 +1,30 @@
 <?php
-// Configurações do banco de dados
-$host = '34.55.95.29';
-$dbname = 'users';
-$username = 'postgres';
-$password = 's3nh@B3@!';
 
-// Conexão com o banco de dados
+// Configuração do banco de dados
+$host = 'localhost';
+$dbname = 'meu_banco';
+$username = 'lemb';
+$password = 'lemb';
+
+// Conectar ao banco de dados
 try {
-    $pdo = new PDO("mysql:host=$host;dbname=$dbname;charset=utf8", $username, $password);
-    // Configura o PDO para lançar exceções em caso de erros
+    $pdo = new PDO("mysql:host=$host;dbname=$dbname", $username, $password);
     $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+    $pdo->exec("SET NAMES 'utf8mb4'"); // Definir charset para utf8mb4
 } catch (PDOException $e) {
     echo json_encode([
         "sucesso" => false,
-        "mensagem" => "Erro ao conectar com o banco de dados: " . $e->getMessage()
+        "mensagem" => "Erro ao conectar ao banco de dados: " . $e->getMessage()
     ]);
     exit;
 }
 
 if ($_SERVER["REQUEST_METHOD"] === "POST") {
+    // Recebendo dados do formulário
     $email = $_POST["email"] ?? "";
-    $senha = $_POST["senha"] ?? "";
+    $senha = $_POST["senha"] ?? ""; // Note que no HTML o name é "senha" mas no PHP está como "senha"
 
-    // Verifica se o email ou a senha não estão vazios
+    // Verifica se os campos estão vazios
     if (empty($email) || empty($senha)) {
         echo json_encode([
             "sucesso" => false,
@@ -32,20 +34,28 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
     }
 
     try {
-        // Prepara a consulta SQL
-        $stmt = $pdo->prepare("SELECT * FROM usuarios WHERE email = :email");
-        $stmt->bindParam(':email', $email);
-        $stmt->execute();
-        
-        // Obtém o usuário
+        // Busca o usuário no banco de dados pelo e-mail
+        $sql = "SELECT id, username, nome, email, senha, admin FROM usuarios WHERE email = :email";
+        $stmt = $pdo->prepare($sql);
+        $stmt->execute(['email' => $email]);
         $usuario = $stmt->fetch(PDO::FETCH_ASSOC);
-        
-        // Verifica se encontrou o usuário e se a senha está correta
+
+        // Verifica se o usuário existe e a senha está correta
         if ($usuario && password_verify($senha, $usuario['senha'])) {
+            // Inicia a sessão (se necessário)
+            session_start();
+            $_SESSION['usuario_id'] = $usuario['id'];
+            $_SESSION['usuario_nome'] = $usuario['nome'];
+            $_SESSION['usuario_email'] = $usuario['email'];
+            $_SESSION['usuario_admin'] = $usuario['admin'];
+
+            // Determina para onde redirecionar baseado no tipo de usuário
+            $redirecionar = $usuario['admin'] ? 'admin-dashboard.html' : 'user-dashboard.html';
+
             echo json_encode([
                 "sucesso" => true,
                 "mensagem" => "Login realizado com sucesso!",
-                "redirecionar" => "admin.html"
+                "redirecionar" => $redirecionar
             ]);
         } else {
             echo json_encode([
@@ -56,8 +66,7 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
     } catch (PDOException $e) {
         echo json_encode([
             "sucesso" => false,
-            "mensagem" => "Erro ao verificar credenciais: " . $e->getMessage()
+            "mensagem" => "Erro ao realizar login: " . $e->getMessage()
         ]);
     }
 }
-?>
