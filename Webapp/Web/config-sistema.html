@@ -3,18 +3,48 @@
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1">
         <title>Configurações do Sistema</title>
+        <script src="https://cdn.tailwindcss.com"></script>
     </head>
-    <body>
-        <h1>Configurações do Sistema</h1>
-        <form id="configSistema">
-            <input name="ip-servidor" type="text" placeholder="IP do Servidor Central"> <br>
-            <input name="ip-bd" type="text" placeholder="IP do Servidor Central"> <br>
-            <input name="nome-bd" type="text" placeholder="Nome do Banco de Dados"> <br>
-            <input name="senha-bd" type="password" placeholder="Senha do Banco de Dados"> <br>
-            <input name="nome-empresa" type="text" placeholder="Nome da Empresa"> <br>
-            <label>Logo da Empresa</label> <br>
-            <input name="logo-empresa" type="file"> <br>
-            <button type="submit">Configurar</button>
-        </form>
+    <body class="bg-gray-100 min-h-screen py-8">
+        <div class="max-w-2xl mx-auto bg-white p-8 rounded-lg shadow-md">
+            <h1 class="text-3xl font-bold text-gray-800 mb-8 text-center">Configurações do Sistema</h1>
+            
+            <form id="configSistema" class="space-y-6">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div>
+                        <input name="ip-servidor" type="text" placeholder="IP do Servidor Central" 
+                               class="w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-700">
+                    </div>
+                    <div>
+                        <input name="ip-bd" type="text" placeholder="IP do Banco de Dados" 
+                               class="w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-700">
+                    </div>
+                    <div>
+                        <input name="nome-bd" type="text" placeholder="Nome do Banco de Dados" 
+                               class="w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-700">
+                    </div>
+                    <div>
+                        <input name="senha-bd" type="password" placeholder="Senha do Banco de Dados" 
+                               class="w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-700">
+                    </div>
+                    <div class="md:col-span-2">
+                        <input name="nome-empresa" type="text" placeholder="Nome da Empresa" 
+                               class="w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-700">
+                    </div>
+                    <div class="md:col-span-2">
+                        <label class="block text-gray-700 mb-2">Logo da Empresa</label>
+                        <input name="logo-empresa" type="file" 
+                               class="w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-700">
+                    </div>
+                </div>
+                
+                <div class="flex justify-center mt-8">
+                    <button type="submit" 
+                            class="bg-green-700 text-white py-2 px-6 rounded-md hover:bg-green-800 transition duration-200 focus:outline-none focus:ring-2 focus:ring-green-700 focus:ring-offset-2">
+                        Configurar
+                    </button>
+                </div>
+            </form>
+        </div>
     </body>
 </html>
