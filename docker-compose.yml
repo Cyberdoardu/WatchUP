@@ -1,46 +1,20 @@
 version: '3.8'
 
 services:
-  scylladb:
-    image: scylladb/scylla:6.2.3
-    command:
-      - --developer-mode=1
-      - --overprovisioned=1
-      - --smp=2
-      - --memory=2G
-      - --api-address=0.0.0.0
-    privileged: true
+  mariadb:
+    image: mariadb:latest
+    environment:
+      MARIADB_ROOT_PASSWORD: rootpassword
+      MARIADB_DATABASE: watchup
+      MARIADB_USER: watchuser
+      MARIADB_PASSWORD: watchpassword
     volumes:
-      - scylla_data:/var/lib/scylla
-      - ./db/schema:/docker-entrypoint-initdb.d:ro
-    ulimits:
-      memlock:
-        soft: -1
-        hard: -1
-      nofile:
-        soft: 200000
-        hard: 200000
+      - mariadb_data:/var/lib/mysql
+      - ./bd/schema:/docker-entrypoint-initdb.d
     networks:
       - monitor-net
     ports:
-      - "9042:9042"
-      - "10000:10000"
-    healthcheck:
-      test: ["CMD-SHELL", "cqlsh -e 'DESCRIBE KEYSPACES'"]
-      interval: 10s
-      timeout: 20s
-      retries: 15
-      start_period: 120s
-    environment:
-      - SCYLLA_CLUSTER_NAME=MonitorCluster
-      - SCYLLA_DATACENTER=dc1
-    # Novo comando para executar o script após inicialização
-    entrypoint: |
-      bash -c '
-      /docker-entrypoint.py &&
-      cqlsh -f /init-scripts/init.cql &&
-      tail -f /dev/null
-      '
+      - "3306:3306"
 
 
   central-server:
@@ -48,15 +22,14 @@ services:
     ports:
       - "5000:5000"
     environment:
-      - SCYLLA_HOSTS=scylladb
-      - SCYLLA_KEYSPACE=watchup
+      - DB_HOST=mariadb
+      - DB_NAME=watchup
+      - DB_USER=watchuser
+      - DB_PASSWORD=watchpassword
     depends_on:
-      scylladb:
-        condition: service_healthy
+      - mariadb
     networks:
       - monitor-net
-
-
 
   monitoring-agent:
     build: ./Agent
@@ -64,34 +37,27 @@ services:
       - CENTRAL_SERVER_URL=http://central-server:5000
       - AGENT_NAME=agent-01
       - CHECK_INTERVAL=30
-    ports:  # Adicione esta seção
-      - "5001:5001"
+    depends_on:
+      - central-server
     networks:
       - monitor-net
-    logging:  # Adicione para debug
-      driver: "json-file"
-      options:
-        max-size: "10m"
-        max-file: "3"
+
   webapp:
     build:
-      context: ./Webapp  # Contexto principal agora é a pasta Webapp
+      context: ./Webapp
       dockerfile: setup_files/Dockerfile
     ports:
       - "8080:80"
     volumes:
-      - ./Webapp/Web:/var/www/html  # Adicione este volume para desenvolvimento
+      - ./Webapp/Web:/var/www/html
+    depends_on:
+      - mariadb
     networks:
       - monitor-net
-    depends_on:
-      - scylladb
-    environment:
-      - SCYLLA_HOSTS=scylladb
-      - SCYLLA_KEYSPACE=watchup
-      
+
 networks:
   monitor-net:
     driver: bridge
 
 volumes:
-  scylla_data:
+  mariadb_data:

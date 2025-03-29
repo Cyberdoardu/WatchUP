@@ -1,3 +1,4 @@
-flask==3.0.2
-cassandra-driver==3.29.1
+Flask==3.0.2
+mysql-connector-python==8.3.0
 python-dotenv==1.0.1
+requests==2.31.0

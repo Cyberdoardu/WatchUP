@@ -1,28 +1,35 @@
 <?php
-require_once 'vendor/autoload.php'; // Carregar dependências
+class MariaDBConnection {
+    private static $connection = null;
 
-class ScyllaDB {
-    private static $cluster;
-    private static $session;
+    public static function getConnection() {
+        if (!self::$connection) {
+            $host = $_ENV['DB_HOST'] ?? 'mariadb';
+            $dbname = $_ENV['DB_NAME'] ?? 'watchup';
+            $user = $_ENV['DB_USER'] ?? 'watchuser';
+            $pass = $_ENV['DB_PASSWORD'] ?? 'watchpassword';
 
-    public static function getSession() {
-        if (!self::$session) {
             try {
-                self::$cluster = Cassandra::cluster()
-                    ->withContactPoints('scylladb') // Nome do serviço no Docker
-                    ->build();
+                self::$connection = new mysqli($host, $user, $pass, $dbname);
                 
-                self::$session = self::$cluster->connect("watchup");
+                if (self::$connection->connect_errno) {
+                    throw new Exception("Connection failed: " . self::$connection->connect_error);
+                }
+                
+                if (!self::$connection->set_charset("utf8mb4")) {
+                    throw new Exception("Charset error: " . self::$connection->error);
+                }
 
-            } catch (Cassandra\Exception $e) {
-                error_log("SCYLLA CONNECTION ERROR: " . $e->getMessage());
+            } catch (Exception $e) {
+                error_log("DATABASE ERROR: " . $e->getMessage());
+                http_response_code(500);
                 die(json_encode([
                     "sucesso" => false,
-                    "mensagem" => "Erro de conexão com o banco de dados"
+                    "mensagem" => "Erro crítico de banco de dados"
                 ]));
             }
         }
-        return self::$session;
+        return self::$connection;
     }
 }
 ?>
