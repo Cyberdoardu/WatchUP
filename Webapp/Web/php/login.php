@@ -1,50 +1,32 @@
 <?php
+require_once 'connection.php';
 
-// Configuração do banco de dados
-$host = 'localhost';
-$dbname = 'meu_banco';
-$username = 'lemb';
-$password = 'lemb';
-
-// Conectar ao banco de dados
-try {
-    $pdo = new PDO("mysql:host=$host;dbname=$dbname", $username, $password);
-    $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
-    $pdo->exec("SET NAMES 'utf8mb4'"); // Definir charset para utf8mb4
-} catch (PDOException $e) {
-    echo json_encode([
-        "sucesso" => false,
-        "mensagem" => "Erro ao conectar ao banco de dados: " . $e->getMessage()
-    ]);
-    exit;
-}
+$session = ScyllaDB::getSession();
 
 if ($_SERVER["REQUEST_METHOD"] === "POST") {
-    // Recebendo dados do formulário
     $email = $_POST["email"] ?? "";
-    $senha = $_POST["senha"] ?? ""; // Note que no HTML o name é "senha" mas no PHP está como "senha"
+    $senha = $_POST["senha"] ?? "";
 
-    // Verifica se os campos estão vazios
-    if (empty($email) || empty($senha)) {
-        echo json_encode([
-            "sucesso" => false,
-            "mensagem" => "E-mail e senha são obrigatórios!"
-        ]);
-        exit;
-    }
+    // Validações (mantenha as mesmas)
 
     try {
-        // Busca o usuário no banco de dados pelo e-mail
-        $sql = "SELECT id, username, nome, email, senha, admin FROM usuarios WHERE email = :email";
-        $stmt = $pdo->prepare($sql);
-        $stmt->execute(['email' => $email]);
-        $usuario = $stmt->fetch(PDO::FETCH_ASSOC);
+        $query = "SELECT id, username, nome, email, senha, admin FROM usuarios WHERE email = ? LIMIT 1";
+        $statement = $session->prepare($query);
+        $result = $session->execute($statement, ['arguments' => [$email]]);
+        
+        if ($result->count() === 0) {
+            echo json_encode([
+                "sucesso" => false,
+                "mensagem" => "Credenciais inválidas!"
+            ]);
+            exit;
+        }
 
-        // Verifica se o usuário existe e a senha está correta
-        if ($usuario && password_verify($senha, $usuario['senha'])) {
-            // Inicia a sessão (se necessário)
+        $usuario = $result->first();
+        
+        if (password_verify($senha, $usuario['senha'])) {
             session_start();
-            $_SESSION['usuario_id'] = $usuario['id'];
+            $_SESSION['usuario_id'] = $usuario['id']->uuid();
             $_SESSION['usuario_nome'] = $usuario['nome'];
             $_SESSION['usuario_email'] = $usuario['email'];
             $_SESSION['usuario_admin'] = $usuario['admin'];
@@ -57,13 +39,16 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
         } else {
             echo json_encode([
                 "sucesso" => false,
-                "mensagem" => "E-mail ou senha incorretos!"
+                "mensagem" => "Credenciais inválidas!"
             ]);
         }
-    } catch (PDOException $e) {
+
+    } catch (Cassandra\Exception $e) {
+        error_log("SCYLLA ERROR: " . $e->getMessage());
         echo json_encode([
             "sucesso" => false,
-            "mensagem" => "Erro ao realizar login: " . $e->getMessage()
+            "mensagem" => "Erro no banco de dados: " . $e->getMessage()
         ]);
     }
 }
+?>
