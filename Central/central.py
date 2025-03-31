@@ -23,11 +23,17 @@ db_config = {
 }
 
 # Criar pool de conexões
-try:
-    connection_pool = pooling.MySQLConnectionPool(**db_config)
-except Error as e:
-    app.logger.error(f"Erro ao criar pool de conexões: {e}")
-    exit(1)
+def create_connection_pool():
+    for _ in range(10):  # 10 tentativas
+        try:
+            print(f"Tentando conectar ao MariaDB... Tentativa {_+1}/10")
+            return pooling.MySQLConnectionPool(**db_config)
+        except Error as e:
+            app.logger.error(f"Erro ao conectar: {e}")
+            time.sleep(10)
+    raise Exception("Não foi possível conectar ao MariaDB após 10 tentativas")
+
+connection_pool = create_connection_pool()
 
 # Criação das tabelas
 def create_tables():

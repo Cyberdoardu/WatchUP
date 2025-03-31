@@ -29,7 +29,7 @@ def ping_check(target):
 
 def register_agent():
     global registered
-    max_retries = 5
+    max_retries = 10
     retry_count = 0
     
     while not registered and retry_count < max_retries:
@@ -37,7 +37,7 @@ def register_agent():
             response = requests.post(
                 f"{os.environ['CENTRAL_SERVER_URL']}/register",
                 json={'agent_name': os.environ['AGENT_NAME']},
-                timeout=5
+                timeout=10
             )
             if response.ok:
                 registered = True
