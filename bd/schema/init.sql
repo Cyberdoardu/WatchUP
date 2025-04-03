@@ -10,25 +10,52 @@ CREATE TABLE IF NOT EXISTS usuarios (
     admin BOOLEAN NOT NULL DEFAULT 0
 );
 
-CREATE TABLE agents (
+CREATE TABLE IF NOT EXISTS agents (
     agent_id VARCHAR(255) PRIMARY KEY,
     last_seen DATETIME,
-    status VARCHAR(50),
-    targets JSON
+    status ENUM('active', 'inactive', 'maintenance') DEFAULT 'active'
 );
 
-CREATE TABLE monitors (
+-- Nova tabela de definição de monitores
+CREATE TABLE IF NOT EXISTS monitors (
     id INT AUTO_INCREMENT PRIMARY KEY,
-    agent_id VARCHAR(255),
-    monitor_name VARCHAR(255),
-    timestamp DATETIME,
-    status INT,
-    INDEX idx_agent_monitor (agent_id, monitor_name),
-    INDEX idx_timestamp (timestamp)
+    monitor_name VARCHAR(255) NOT NULL,
+    check_type ENUM('ping', 'http_status', 'api_response', 'custom_script') NOT NULL,
+    parameters JSON NOT NULL,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE KEY unique_monitor (monitor_name)
 );
+
+-- Tabela de associação agentes-monitores
+CREATE TABLE IF NOT EXISTS monitor_assignments (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    agent_id VARCHAR(255) NOT NULL,
+    monitor_id INT NOT NULL,
+    is_primary BOOLEAN DEFAULT true,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (agent_id) REFERENCES agents(agent_id),
+    FOREIGN KEY (monitor_id) REFERENCES monitors(id),
+    UNIQUE KEY unique_assignment (agent_id, monitor_id)
+);
+
+-- Tabela de dados brutos (principal)
+CREATE TABLE IF NOT EXISTS raw_data (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    monitor_id INT NOT NULL,
+    agent_id VARCHAR(255) NOT NULL,
+    timestamp DATETIME(6) NOT NULL,
+    response_time FLOAT,
+    result_code INT,
+    raw_result JSON NOT NULL,
+    FOREIGN KEY (monitor_id) REFERENCES monitors(id),
+    FOREIGN KEY (agent_id) REFERENCES agents(agent_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- Índices para consultas rápidas
+CREATE INDEX idx_timestamp ON raw_data(timestamp);
+CREATE INDEX idx_monitor ON raw_data(monitor_id);
+CREATE INDEX idx_check_type ON monitors(check_type);
+
 
 GRANT ALL PRIVILEGES ON watchup.* TO 'watchuser'@'%';
 FLUSH PRIVILEGES;
-
-CREATE INDEX idx_usuarios_email ON usuarios(email);
-CREATE INDEX idx_usuarios_username ON usuarios(username);

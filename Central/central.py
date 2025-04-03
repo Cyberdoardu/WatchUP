@@ -1,3 +1,4 @@
+import json
 import os
 import time
 from flask import Flask, request, jsonify
@@ -37,33 +38,64 @@ connection_pool = create_connection_pool()
 
 # Criação das tabelas
 def create_tables():
-    create_agents_table = """
-    CREATE TABLE IF NOT EXISTS agents (
-        agent_id VARCHAR(255) PRIMARY KEY,
-        last_seen DATETIME,
-        status VARCHAR(50),
-        targets JSON
-    )
-    """
-
-    create_monitors_table = """
-    CREATE TABLE IF NOT EXISTS monitors (
-        id INT AUTO_INCREMENT PRIMARY KEY,
-        agent_id VARCHAR(255),
-        monitor_name VARCHAR(255),
-        timestamp DATETIME,
-        status INT,
-        INDEX idx_agent_monitor (agent_id, monitor_name),
-        INDEX idx_timestamp (timestamp)
-    )
-    """
+    tables = [
+        """
+        CREATE TABLE IF NOT EXISTS agents (
+            agent_id VARCHAR(255) PRIMARY KEY,
+            last_seen DATETIME,
+            status ENUM('active', 'inactive', 'maintenance') DEFAULT 'active'
+        )
+        """,
+        """
+        CREATE TABLE IF NOT EXISTS monitors (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            monitor_name VARCHAR(255) NOT NULL,
+            check_type ENUM('ping', 'http_status', 'api_response', 'custom_script') NOT NULL,
+            parameters JSON NOT NULL,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE KEY unique_monitor (monitor_name)
+        )
+        """,
+        """
+        CREATE TABLE IF NOT EXISTS monitor_assignments (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            agent_id VARCHAR(255) NOT NULL,
+            monitor_id INT NOT NULL,
+            is_primary BOOLEAN DEFAULT true,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (agent_id) REFERENCES agents(agent_id),
+            FOREIGN KEY (monitor_id) REFERENCES monitors(id),
+            UNIQUE KEY unique_assignment (agent_id, monitor_id)
+        )
+        """,
+        """
+        CREATE TABLE IF NOT EXISTS raw_data (
+            id BIGINT AUTO_INCREMENT PRIMARY KEY,
+            monitor_id INT NOT NULL,
+            agent_id VARCHAR(255) NOT NULL,
+            timestamp DATETIME(6) NOT NULL,
+            response_time FLOAT,
+            result_code INT,
+            raw_result JSON NOT NULL,
+            FOREIGN KEY (monitor_id) REFERENCES monitors(id),
+            FOREIGN KEY (agent_id) REFERENCES agents(agent_id)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+        """
+    ]
 
     try:
         conn = connection_pool.get_connection()
         cursor = conn.cursor()
         
-        cursor.execute(create_agents_table)
-        cursor.execute(create_monitors_table)
+        for table in tables:
+            cursor.execute(table)
+            
+        cursor.execute("""
+            CREATE INDEX IF NOT EXISTS idx_timestamp ON raw_data(timestamp)
+        """)
+        cursor.execute("""
+            CREATE INDEX IF NOT EXISTS idx_monitor ON raw_data(monitor_id)
+        """)
         
         conn.commit()
     except Error as e:
@@ -98,6 +130,54 @@ def cleanup_inactive_agents():
                 conn.close()
         time.sleep(3600)
 
+@app.route('/monitors', methods=['POST'])
+def create_monitor():
+    try:
+        data = request.json
+        conn = connection_pool.get_connection()
+        cursor = conn.cursor(dictionary=True)
+        
+        # Verificar se o agent existe
+        cursor.execute("SELECT 1 FROM agents WHERE agent_id = %s", (data['agent'],))
+        if not cursor.fetchone():
+            return jsonify({'error': 'Agent não encontrado'}), 404
+        
+        # Criar o monitor
+        cursor.execute(
+            """INSERT INTO monitors 
+            (monitor_name, check_type, parameters) 
+            VALUES (%s, %s, %s)""",
+            (data['monitor_name'], data['check_type'], json.dumps(data['parameters']))
+        )
+        monitor_id = cursor.lastrowid
+        
+        # Associar ao agent
+        cursor.execute(
+            """INSERT INTO monitor_assignments 
+            (agent_id, monitor_id, is_primary) 
+            VALUES (%s, %s, %s)""",
+            (data['agent'], monitor_id, data.get('is_primary', True))
+        )
+        
+        conn.commit()
+        
+        return jsonify({
+            'id': monitor_id,
+            'agent_id': data['agent'],
+            'monitor_name': data['monitor_name'],
+            'check_type': data['check_type'],
+            'parameters': data['parameters']
+        }), 201
+        
+    except Error as e:
+        conn.rollback()
+        return jsonify({'error': str(e)}), 500
+    finally:
+        if conn.is_connected():
+            cursor.close()
+            conn.close()
+
+
 @app.route('/register', methods=['POST'])
 def register_agent():
     data = request.json
@@ -107,9 +187,10 @@ def register_agent():
         conn = connection_pool.get_connection()
         cursor = conn.cursor()
         
+        # Query corrigida para nova estrutura da tabela agents
         cursor.execute(
-            "INSERT INTO agents (agent_id, last_seen, status, targets) VALUES (%s, %s, %s, %s)",
-            (agent_id, datetime.now(), 'active', '[]')
+            "INSERT INTO agents (agent_id, last_seen, status) VALUES (%s, %s, %s)",
+            (agent_id, datetime.now(), 'active')  # Removido o campo targets
         )
         
         conn.commit()
@@ -159,40 +240,7 @@ def health_check():
             cursor.close()
             conn.close()
 
-@app.route('/metrics', methods=['POST'])
-def receive_metrics():
-    data = request.json
-    agent_id = data['agent']
-    
-    try:
-        conn = connection_pool.get_connection()
-        cursor = conn.cursor()
-        
-        query = """
-            INSERT INTO monitors 
-            (agent_id, monitor_name, timestamp, status)
-            VALUES (%s, %s, %s, %s)
-        """
-        
-        values = [
-            (agent_id, 
-             metric['monitor_name'], 
-             datetime.now(), 
-             1 if metric['result']['status'] == 'up' else 0)
-            for metric in data['metrics']
-        ]
-        
-        cursor.executemany(query, values)
-        conn.commit()
-        return jsonify({'status': 'received'})
-    
-    except Error as e:
-        return jsonify({'error': str(e)}), 500
-    finally:
-        if conn.is_connected():
-            cursor.close()
-            conn.close()
-
+            
 @app.route('/targets', methods=['GET', 'POST'])
 def handle_targets():
     agent_id = request.args.get('agent')
@@ -202,25 +250,77 @@ def handle_targets():
         cursor = conn.cursor(dictionary=True)
         
         if request.method == 'POST':
-            targets = request.json
-            cursor.execute(
-                "UPDATE agents SET targets = %s WHERE agent_id = %s",
-                (str(targets), agent_id)
-            )
+            # Nova forma de armazenar targets usando a tabela monitor_assignments
+            monitors = request.json
+            cursor.execute("DELETE FROM monitor_assignments WHERE agent_id = %s", (agent_id,))
+            
+            for monitor in monitors:
+                cursor.execute(
+                    """INSERT INTO monitor_assignments 
+                    (agent_id, monitor_id, is_primary) 
+                    VALUES (%s, %s, %s)
+                    ON DUPLICATE KEY UPDATE is_primary = VALUES(is_primary)""",
+                    (agent_id, monitor['id'], monitor.get('is_primary', True))
+                )
+            
             conn.commit()
             return jsonify({'status': 'targets updated'})
         
-        cursor.execute(
-            "SELECT targets FROM agents WHERE agent_id = %s",
-            (agent_id,)
-        )
-        result = cursor.fetchone()
+        # Buscar monitors atribuídos ao agent
+        cursor.execute("""
+            SELECT m.id, m.monitor_name, m.check_type, m.parameters 
+            FROM monitors m
+            INNER JOIN monitor_assignments ma ON m.id = ma.monitor_id
+            WHERE ma.agent_id = %s
+        """, (agent_id,))
         
-        return jsonify(result['targets'] if result and result['targets'] else [])
+        results = cursor.fetchall()
+        return jsonify(results)
     
     except Error as e:
         app.logger.error(f"Targets error: {e}")
         return jsonify({'error': str(e)}), 500
+    finally:
+        if conn.is_connected():
+            cursor.close()
+            conn.close()
+
+@app.route('/metrics', methods=['POST'])
+def receive_metrics():
+    try:
+        data = request.json
+        required_fields = ['agent_id', 'metrics']
+        if not all(field in data for field in required_fields):
+            return jsonify({'error': 'Campos obrigatórios faltando'}), 400
+
+        conn = connection_pool.get_connection()
+        cursor = conn.cursor()
+        
+        values = []
+        for metric in data['metrics']:
+            values.append((
+                metric['monitor_id'],
+                data['agent_id'],
+                datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f'),
+                metric.get('response_time'),
+                metric['result_code'],
+                json.dumps(metric['raw_result'])
+            ))
+        
+        cursor.executemany("""
+            INSERT INTO raw_data 
+            (monitor_id, agent_id, timestamp, response_time, result_code, raw_result)
+            VALUES (%s, %s, %s, %s, %s, %s)
+        """, values)
+        
+        conn.commit()
+        return jsonify({'status': 'received', 'count': len(values)})
+    
+    except Error as e:
+        conn.rollback()
+        return jsonify({'error': str(e)}), 500
+    except Exception as e:
+        return jsonify({'error': str(e)}), 400
     finally:
         if conn.is_connected():
             cursor.close()
@@ -231,14 +331,42 @@ def get_metrics():
     agent_id = request.args.get('agent')
     monitor_name = request.args.get('monitor')
     
+    if not agent_id or not monitor_name:
+        return jsonify({'error': 'Parâmetros agent e monitor são obrigatórios'}), 400
+    
     try:
         conn = connection_pool.get_connection()
         cursor = conn.cursor(dictionary=True)
         
-        cursor.execute(
-            "SELECT timestamp, status FROM monitors WHERE agent_id = %s AND monitor_name = %s ORDER BY timestamp DESC",
-            (agent_id, monitor_name)
-        )
+        # Verificar existência do monitor
+        cursor.execute("""
+            SELECT m.id 
+            FROM monitors m
+            JOIN monitor_assignments ma ON m.id = ma.monitor_id
+            WHERE 
+                ma.agent_id = %s AND
+                m.monitor_name = %s
+            LIMIT 1
+        """, (agent_id, monitor_name))
+        
+        monitor = cursor.fetchone()
+        if not monitor:
+            return jsonify({'error': 'Monitor não encontrado'}), 404
+        
+        # Buscar dados
+        cursor.execute("""
+            SELECT 
+                timestamp,
+                response_time,
+                result_code AS status,
+                raw_result
+            FROM raw_data
+            WHERE 
+                agent_id = %s AND
+                monitor_id = %s
+            ORDER BY timestamp DESC
+            LIMIT 100
+        """, (agent_id, monitor['id']))
         
         results = cursor.fetchall()
         return jsonify(results)

@@ -90,24 +90,88 @@ def monitoring_loop():
                 time.sleep(5)
                 continue
                 
-            if not targets:  # Verificar se targets está vazio
-                print("Nenhum target definido, aguardando...")
+            if not targets:
+                print("Nenhum monitor definido, aguardando...")
                 time.sleep(10)
                 continue
                 
-            metrics = [{
-                'monitor_name': t['monitor_name'],
-                'target': t['address'],
-                'type': t['type'],
-                'result': ping_check(t['address'])
-            } for t in targets]
+            metrics = []
+            
+            for monitor in targets:
+                try:
+                    start_time = time.time()
+                    result = None
+                    result_code = 0
+                    raw_result = {}
+                    
+                    if monitor['check_type'] == 'ping':
+                        # Processar ping
+                        target = monitor['parameters']['target']
+                        result = ping_check(target)
+                        result_code = 1 if result['status'] == 'up' else 0
+                        raw_result = {'target': target, 'status': result['status']}
+                        
+                    elif monitor['check_type'] == 'http_status':
+                        # Processar HTTP
+                        url = monitor['parameters']['url']
+                        expected_status = monitor['parameters'].get('expected_status', 200)
+                        timeout = monitor['parameters'].get('timeout', 5)
+                        
+                        try:
+                            response = requests.get(url, timeout=timeout)
+                            result_code = 1 if response.status_code == expected_status else 0
+                            raw_result = {
+                                'url': url,
+                                'status_code': response.status_code,
+                                'response_time': response.elapsed.total_seconds()
+                            }
+                        except Exception as e:
+                            raw_result = {'error': str(e)}
+                            result_code = 0
+                    
+                    elif monitor['check_type'] == 'api_response':
+                        # Processar API
+                        url = monitor['parameters']['url']
+                        regex_pattern = monitor['parameters']['regex']
+                        timeout = monitor['parameters'].get('timeout', 5)
+                        
+                        try:
+                            response = requests.get(url, timeout=timeout)
+                            match = re.search(regex_pattern, response.text)
+                            result_code = 1 if match else 0
+                            raw_result = {
+                                'url': url,
+                                'status_code': response.status_code,
+                                'match_found': bool(match)
+                            }
+                        except Exception as e:
+                            raw_result = {'error': str(e)}
+                            result_code = 0
+                    
+                    # Construir métrica padronizada
+                    metrics.append({
+                        'monitor_id': monitor['id'],
+                        'response_time': (time.time() - start_time) * 1000,  # ms
+                        'result_code': result_code,
+                        'raw_result': raw_result
+                    })
+                    
+                except Exception as e:
+                    print(f"Erro no monitor {monitor['id']}: {str(e)}")
+                    metrics.append({
+                        'monitor_id': monitor['id'],
+                        'response_time': None,
+                        'result_code': 0,
+                        'raw_result': {'error': str(e)}
+                    })
 
+            # Enviar métricas processadas
             if metrics:
                 try:
                     response = requests.post(
                         f"{os.environ['CENTRAL_SERVER_URL']}/metrics",
                         json={
-                            'agent': os.environ['AGENT_NAME'],
+                            'agent_id': os.environ['AGENT_NAME'],
                             'metrics': metrics
                         },
                         timeout=10
@@ -117,10 +181,9 @@ def monitoring_loop():
                     print(f"Erro ao enviar métricas: {str(e)}")
             
         except Exception as e:
-            print(f"Erro no loop de monitoramento: {str(e)}")
+            print(f"Erro crítico no loop de monitoramento: {str(e)}")
         
         time.sleep(int(os.environ['CHECK_INTERVAL']))
-
 
 @app.route('/health')
 def health_check():
