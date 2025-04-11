@@ -22,13 +22,13 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
             ]);
             exit;
         }
-
+/*
         session_start();
         $_SESSION['usuario_id'] = $usuario['id'];
         $_SESSION['usuario_nome'] = $usuario['nome'];
         $_SESSION['usuario_email'] = $usuario['email'];
         $_SESSION['usuario_admin'] = $usuario['admin'];
-
+*/
         echo json_encode([
             "sucesso" => true,
             "mensagem" => "Login realizado com sucesso!",
