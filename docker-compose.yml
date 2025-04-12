@@ -37,6 +37,12 @@ services:
       - CENTRAL_SERVER_URL=http://central-server:5000
       - AGENT_NAME=agent-01
       - CHECK_INTERVAL=30
+    dns:
+      - 8.8.8.8
+      - 1.1.1.1
+    sysctls:
+      - net.ipv4.ip_local_port_range=1024 65535
+
     depends_on:
       - central-server
     networks:

@@ -22,6 +22,8 @@ CREATE TABLE IF NOT EXISTS monitors (
     monitor_name VARCHAR(255) NOT NULL,
     check_type ENUM('ping', 'http_status', 'api_response', 'custom_script') NOT NULL,
     parameters JSON NOT NULL,
+    expected_match VARCHAR(255) DEFAULT NULL,
+    retention_days INT DEFAULT 30,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     UNIQUE KEY unique_monitor (monitor_name)
 );
@@ -45,11 +47,12 @@ CREATE TABLE IF NOT EXISTS raw_data (
     agent_id VARCHAR(255) NOT NULL,
     timestamp DATETIME(6) NOT NULL,
     response_time FLOAT,
-    result_code INT,
-    raw_result JSON NOT NULL,
+    success TINYINT(1) NOT NULL,
+    raw_result TEXT DEFAULT NULL,
     FOREIGN KEY (monitor_id) REFERENCES monitors(id),
     FOREIGN KEY (agent_id) REFERENCES agents(agent_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
 
 -- Índices para consultas rápidas
 CREATE INDEX idx_timestamp ON raw_data(timestamp);

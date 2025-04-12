@@ -1,15 +1,16 @@
 FROM python:3.11-slim
 
 RUN apt-get update && apt-get install -y \
-    iputils-ping \
     curl \
+    dnsutils \
+    telnet \
+    netcat-openbsd \
+    iputils-ping \
  && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
-
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
-
 COPY agent.py .
 
 ENV CENTRAL_SERVER_URL="http://central-server:5000"
