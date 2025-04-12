@@ -16,6 +16,7 @@ import re  # Adicionando o import do módulo re
 from threading import Thread
 from flask import Flask, request, jsonify
 import logging
+from datetime import datetime
 logging.basicConfig(level=logging.INFO)
 
 app = Flask(__name__)
@@ -68,7 +69,61 @@ def ping_check(target, timeout=5, count=4):
             'output': f"Erro: {str(e)}"
         }
 
+def process_monitor(monitor):
+    """Executa a verificação específica do monitor com logging detalhado"""
+    result = {'success': 0, 'raw_result': None, 'response_time': 0}
+    try:
+        params = monitor['parameters']
+        check_type = monitor['check_type']
+        start_time = time.time()
 
+        print(f"\n=== PROCESSANDO {check_type.upper()} ===")
+        print(f"Alvo: {params['target']}")
+        
+        if check_type == 'ping':
+            print(f"Parâmetros: count={params.get('count', 4)}, timeout={params.get('timeout', 2)}")
+            result.update(ping_check(
+                params['target'],
+                count=params.get('count', 4),
+                timeout=params.get('timeout', 2)
+            ))
+            
+        elif check_type == 'http_status':
+            expected_status = int(params.get('match', 200))
+            print(f"Esperado: HTTP {expected_status}, Timeout: {params.get('timeout', 5)}s")
+            response = requests.get(params['target'], timeout=params.get('timeout', 5))
+            result['success'] = 1 if response.status_code == expected_status else 0
+            result['response_time'] = response.elapsed.total_seconds() * 1000  # ms
+            if not result['success']:
+                result['raw_result'] = f"Status Recebido: {response.status_code}"
+            
+        elif check_type == 'api_response':
+            print(f"Match: {params.get('match', '')}")
+            print(f"Regex: {params.get('regex', '')}")
+            response = requests.get(params['target'], timeout=params.get('timeout', 5))
+            content = response.text[:500] + '...' if len(response.text) > 500 else response.text
+            
+            if 'regex' in params:
+                match = re.search(params['regex'], response.text)
+                result['success'] = 1 if match else 0
+                print(f"Regex match: {bool(match)}")
+            else:
+                result['success'] = 1 if params.get('match') in response.text else 0
+                print(f"String match: {result['success']}")
+            
+            if not result['success']:
+                result['raw_result'] = content
+
+        print(f"Resultado: {'SUCESSO' if result['success'] else 'FALHA'}")
+        return result
+
+    except Exception as e:
+        print(f"Erro durante execução: {str(e)}")
+        result['raw_result'] = str(e)
+        return result
+    finally:
+        result['response_time'] = (time.time() - start_time) * 1000  # Tempo total
+    
 def register_agent():
     global registered
     max_retries = 10
@@ -133,132 +188,87 @@ def update_targets():
         time.sleep(10)
         
 def monitoring_loop():
+    """Loop principal de monitoramento com controle de intervalos"""
+    last_check = {}
+    
     while True:
         try:
-            print("\n=== INÍCIO DO CICLO DE MONITORAMENTO ===")
+            print("\n" + "="*50)
+            print(f"Ciclo iniciado em: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
             
+            # Verificar registro do agente
             if not registered:
                 print("Agente não registrado, tentando novamente...")
                 register_agent()
                 time.sleep(5)
                 continue
                 
+            # Verificar existência de monitores
             if not targets:
                 print("Nenhum monitor definido, aguardando...")
                 time.sleep(10)
                 continue
                 
-            print(f"Monitores ativos: {len(targets)}")
-            for idx, monitor in enumerate(targets, 1):
-                print(f"Monitor {idx}: {monitor['monitor_name']} ({monitor['check_type']})")
-                
+            print(f"Monitores cadastrados: {len(targets)}")
             metrics = []
             
+            # Processar cada monitor
             for monitor in targets:
+                monitor_id = monitor['id']
                 try:
-                    print(f"\nProcessando monitor: {monitor['monitor_name']}")
-                    print(f"Tipo: {monitor['check_type']}")
-                    print(f"Parâmetros: {monitor['parameters']}")
+                    # Calcular intervalo
+                    check_interval = monitor['parameters'].get('check_time', 60)
+                    last_time = last_check.get(monitor_id, 0)
                     
-                    start_time = time.time()
+                    if (time.time() - last_time) < check_interval:
+                        print(f"Monitor {monitor_id} aguardando próximo ciclo ({check_interval}s)")
+                        continue
+                        
+                    print(f"\n=== INICIANDO VERIFICAÇÃO [{monitor['monitor_name']}] ===")
                     
-                    if monitor['check_type'] == 'ping':
-                        print("Iniciando check de ping...")
-                        result = ping_check(
-                            monitor['parameters']['target'],
-                            timeout=monitor['parameters'].get('timeout', 5),
-                            count=monitor['parameters'].get('count', 4)
-                        )
-                        print(f"Resultado do ping: {result}")
-                        
-                        metrics.append({
-                            'monitor_id': monitor['id'],
-                            'response_time': (time.time() - start_time) * 1000,
-                            'success': result['success'],
-                            'raw_output': result['output']
-                        })
-                        
-                    elif monitor['check_type'] == 'http_status':
-                        # Processar HTTP
-                        url = monitor['parameters']['url']
-                        expected_status = monitor['parameters'].get('expected_status', 200)
-                        timeout = monitor['parameters'].get('timeout', 5)
-                        
-                        try:
-                            response = requests.get(url, timeout=timeout)
-                            success = 1 if response.status_code == expected_status else 0
-                            raw_result = {
-                                'url': url,
-                                'status_code': response.status_code,
-                                'response_time': response.elapsed.total_seconds()
-                            }
-                        except Exception as e:
-                            raw_result = {'error': str(e)}
-                            success = 0
+                    # Executar verificação
+                    result = process_monitor(monitor)
                     
-                    elif monitor['check_type'] == 'api_response':
-                        # Processar API
-                        url = monitor['parameters']['url']
-                        regex_pattern = monitor['parameters'].get('regex', '')
-                        expected_match = monitor['parameters'].get('expected_match', '')
-                        timeout = monitor['parameters'].get('timeout', 5)
-                        
-                        try:
-                            response = requests.get(url, timeout=timeout)
-                            
-                            if regex_pattern:
-                                match = re.search(regex_pattern, response.text)
-                                success = 1 if match else 0
-                            elif expected_match:
-                                success = 1 if expected_match in response.text else 0
-                            else:
-                                success = 1  # Se não tiver critérios, considera sucesso
-                                
-                            raw_result = {
-                                'url': url,
-                                'status_code': response.status_code,
-                                'match_found': bool(match) if 'match' in locals() else None
-                            }
-                        except Exception as e:
-                            raw_result = {'error': str(e)}
-                            success = 0
-                    
-                    # Construir métrica padronizada
+                    # Coletar métricas
                     metrics.append({
-                        'monitor_id': monitor['id'],
-                        'response_time': (time.time() - start_time) * 1000,  # ms
-                        'success': success,  # Alterando de 'result_code' para 'success'
-                        'raw_result': raw_result
+                        'monitor_id': monitor_id,
+                        'success': result['success'],
+                        'response_time': result['response_time'],
+                        'raw_result': result.get('raw_result')
                     })
+                    
+                    # Atualizar último check
+                    last_check[monitor_id] = time.time()
+                    print(f"Verificação completa. Próximo check em {check_interval}s")
                     
                 except Exception as e:
-                    print(f"Erro no monitor {monitor['id']}: {str(e)}")
+                    print(f"Erro crítico no monitor {monitor_id}: {str(e)}")
                     metrics.append({
-                        'monitor_id': monitor['id'],
+                        'monitor_id': monitor_id,
+                        'success': 0,
                         'response_time': 0,
-                        'success': 0,  # Alterando para uso de 'success'
-                        'raw_result': {'error': str(e)}
+                        'raw_result': f"Erro de processamento: {str(e)}"
                     })
 
-            # Enviar métricas processadas
+            # Enviar métricas coletadas
             if metrics:
+                print("\nEnviando métricas para o servidor central...")
                 try:
                     response = requests.post(
                         f"{os.environ['CENTRAL_SERVER_URL']}/metrics",
-                        json={
-                            'agent_id': os.environ['AGENT_NAME'],
-                            'metrics': metrics
-                        },
+                        json={'agent_id': os.environ['AGENT_NAME'], 'metrics': metrics},
                         timeout=10
                     )
                     response.raise_for_status()
+                    print(f"Status do envio: {response.status_code}")
                 except Exception as e:
-                    print(f"Erro ao enviar métricas: {str(e)}")
+                    print(f"Falha no envio de métricas: {str(e)}")
             
         except Exception as e:
-            print(f"Erro crítico no loop de monitoramento: {str(e)}")
+            print(f"ERRO GLOBAL NO LOOP: {str(e)}")
         
-        time.sleep(int(os.environ.get('CHECK_INTERVAL', 30)))
+        # Intervalo entre ciclos completos
+        time.sleep(1)
 
 if __name__ == '__main__':
     register_agent()

@@ -275,36 +275,45 @@ def get_metrics():
             
 @app.route('/monitors', methods=['POST'])
 def create_monitor():
+    conn = None
+    cursor = None
     try:
         data = request.json
         required_fields = ['monitor_name', 'check_type', 'parameters', 'agent']
+        
+        # Validação de campos obrigatórios
         if not all(field in data for field in required_fields):
-            return jsonify({'error': 'Campos obrigatórios faltando'}), 400
+            return jsonify({'error': 'Campos obrigatórios faltando: ' + ', '.join(required_fields)}), 400
 
-        # Validação de parâmetros
         params = data['parameters']
-        if data['check_type'] in ['http_status', 'api_response'] and 'expected_match' not in params:
-            return jsonify({'error': 'expected_match é obrigatório para este tipo de monitor'}), 400
+        check_type = data['check_type']
+        
+        # Validação específica por tipo
+        if check_type in ['http_status', 'api_response']:
+            if 'match' not in params:
+                return jsonify({'error': f'Parâmetro "match" obrigatório para check_type {check_type}'}), 400
+            if check_type == 'api_response' and not any(key in params for key in ['match', 'regex']):
+                return jsonify({'error': 'Necessário "match" ou "regex" para api_response'}), 400
 
         conn = connection_pool.get_connection()
         cursor = conn.cursor(dictionary=True)
         
-        # Inserir monitor
+        # Inserir monitor principal
         cursor.execute("""
             INSERT INTO monitors 
             (monitor_name, check_type, parameters, expected_match, retention_days)
             VALUES (%s, %s, %s, %s, %s)
         """, (
             data['monitor_name'],
-            data['check_type'],
-            json.dumps(data['parameters']),
-            params.get('expected_match'),
+            check_type,
+            json.dumps(params),
+            params.get('match'),  # Mapeia 'match' do payload para 'expected_match' no banco
             data.get('retention_days', 30)
         ))
         
         monitor_id = cursor.lastrowid
         
-        # Associar ao agent
+        # Criar associação com agent
         cursor.execute("""
             INSERT INTO monitor_assignments 
             (agent_id, monitor_id, is_primary)
@@ -317,23 +326,38 @@ def create_monitor():
         
         conn.commit()
         
-        return jsonify({
+        # Montar resposta
+        response_data = {
             'id': monitor_id,
             'monitor_name': data['monitor_name'],
-            'check_type': data['check_type'],
-            'parameters': data['parameters'],
-            'retention_days': data.get('retention_days', 30)
-        }), 201
+            'check_type': check_type,
+            'parameters': params,
+            'expected_match': params.get('match'),
+            'retention_days': data.get('retention_days', 30),
+            'agent_assignment': {
+                'agent_id': data['agent'],
+                'is_primary': data.get('is_primary', True)
+            }
+        }
+        
+        return jsonify(response_data), 201
         
     except Error as e:
-        conn.rollback()
-        return jsonify({'error': str(e)}), 500
+        if conn:
+            conn.rollback()
+        app.logger.error(f"Database error: {str(e)}")
+        return jsonify({'error': 'Erro de banco de dados: ' + str(e)}), 500
+    except Exception as e:
+        if conn:
+            conn.rollback()
+        app.logger.error(f"General error: {str(e)}")
+        return jsonify({'error': 'Erro inesperado: ' + str(e)}), 500
     finally:
-        if conn.is_connected():
-            cursor.close()
+        if conn and conn.is_connected():
+            if cursor:
+                cursor.close()
             conn.close()
-
-
+            
 def cleanup_old_data():
     while True:
         try:
