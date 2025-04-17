@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Incidentes</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-50">
+  <div class="max-w-6xl mx-auto px-4 py-8">
+    <!-- Navegação -->
+    <div class="flex flex-wrap gap-4 border-b pb-4 mb-6">
+      <a href="#" class="font-medium text-gray-500 hover:text-gray-700">Visão Geral</a>
+      <a href="#" class="font-medium text-blue-600">Incidentes</a>
+      <a href="#" class="font-medium text-gray-500 hover:text-gray-700">Anúncios</a>
+      <a href="#" class="font-medium text-gray-500 hover:text-gray-700">Eventos Agendados</a>
+      <a href="#" class="font-medium text-gray-500 hover:text-gray-700 ml-auto">Assinar</a>
+    </div>
+
+    <!-- Botão Criar Incidente -->
+    <div class="mb-6 flex justify-start">
+      <button id="openModalBtn" class="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700">
+        Criar Incidente
+      </button>
+    </div>
+
+    <!-- Modal -->
+    <div id="incidentModal" class="fixed inset-0 bg-black bg-opacity-50 z-50 hidden flex items-center justify-center">
+      <div class="bg-white rounded-lg shadow-lg w-full max-w-2xl mx-4 p-6 relative">
+        <button id="closeModalBtn" class="absolute top-2 right-2 text-gray-500 hover:text-gray-800 text-2xl">&times;</button>
+        <h2 class="text-xl font-medium text-gray-800 mb-4">Novo Incidente</h2>
+
+        <form id="incidentForm" class="space-y-5">
+          <input type="text" id="titulo" required placeholder="Título do incidente" class="w-full p-2 border border-gray-300 rounded" />
+
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">Impacto</label>
+            <select id="impacto" class="w-full p-2 border border-gray-300 rounded">
+              <option value="major">Major Outage</option>
+              <option value="partial">Partial Outage</option>
+              <option value="degraded">Degraded Performance</option>
+            </select>
+          </div>
+
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">Tipo de Aviso</label>
+            <select id="tipoAviso" class="w-full p-2 border border-gray-300 rounded">
+              <option value="problem">Problem</option>
+              <option value="warning">Warning</option>
+              <option value="informative">Informative</option>
+              <option value="maintenance">Maintenance</option>
+            </select>
+          </div>
+
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">Serviço Afetado</label>
+            <select id="servicoAfetado" class="w-full p-2 border border-gray-300 rounded">
+              <option value="servico-teste">Serviço Teste</option>
+            </select>
+          </div>
+
+          <div id="maintenanceFields" class="hidden">
+            <label class="block text-sm font-medium text-gray-700 mb-1">Período de Manutenção</label>
+            <div class="flex gap-4">
+              <input type="datetime-local" id="inicioManutencao" class="w-1/2 p-2 border border-gray-300 rounded" />
+              <input type="datetime-local" id="fimManutencao" class="w-1/2 p-2 border border-gray-300 rounded" />
+            </div>
+          </div>
+
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">Descrição (Markdown)</label>
+            <textarea id="descricao" rows="5" required class="w-full p-2 border border-gray-300 rounded" placeholder="Escreva os detalhes..."></textarea>
+          </div>
+
+          <div class="flex justify-end">
+            <button type="submit" class="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700">
+              Criar Incidente
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- Lista de Incidentes -->
+    <h2 class="text-xl font-medium text-gray-800 mb-4">Incidentes Ativos</h2>
+    <ul id="incidentList" class="space-y-4"></ul>
+  </div>
+
+  <script>
+    const openModalBtn = document.getElementById('openModalBtn');
+    const closeModalBtn = document.getElementById('closeModalBtn');
+    const modal = document.getElementById('incidentModal');
+    const tipoAviso = document.getElementById('tipoAviso');
+    const maintenanceFields = document.getElementById('maintenanceFields');
+    const incidentForm = document.getElementById('incidentForm');
+    const incidentList = document.getElementById('incidentList');
+
+    openModalBtn.addEventListener('click', () => modal.classList.remove('hidden'));
+    closeModalBtn.addEventListener('click', () => modal.classList.add('hidden'));
+    modal.addEventListener('click', (e) => {
+      if (e.target === modal) modal.classList.add('hidden');
+    });
+
+    tipoAviso.addEventListener('change', () => {
+      maintenanceFields.classList.toggle('hidden', tipoAviso.value !== 'maintenance');
+    });
+
+    incidentForm.addEventListener('submit', function (e) {
+      e.preventDefault();
+
+      const titulo = document.getElementById('titulo').value;
+      const impacto = document.getElementById('impacto').value;
+      const tipo = document.getElementById('tipoAviso').value;
+      const servico = document.getElementById('servicoAfetado').value;
+      const descricao = document.getElementById('descricao').value;
+
+      let cor = 'border-gray-300';
+      if (tipo === 'problem') cor = 'border-red-500';
+      else if (tipo === 'warning') cor = 'border-yellow-400';
+      else if (tipo === 'informative') cor = 'border-blue-400';
+      else if (tipo === 'maintenance') cor = 'border-purple-500';
+
+      const item = document.createElement('li');
+      item.className = `bg-white border-l-4 ${cor} p-4 rounded shadow-sm relative`;
+
+      let estadoAtual = 'Identificado';
+      const estados = ['Identificado', 'Reconhecido', 'Resolvido'];
+      const concluidos = [estadoAtual];
+
+      const cores = {
+        'Identificado': 'red-500',
+        'Reconhecido': 'yellow-400',
+        'Resolvido': 'green-500',
+      };
+
+      const renderEstados = () => {
+        return `
+          <div class="flex items-center gap-6 text-sm text-gray-600 mb-2">
+            <span>
+              Impacto: <strong>${impacto}</strong>
+              | Serviço: <strong>${servico}</strong>
+              | Estado Atual: <strong class="${
+                estadoAtual === 'Identificado' ? 'text-red-500' :
+                estadoAtual === 'Reconhecido' ? 'text-yellow-500' :
+                'text-green-500'
+              }">${estadoAtual}</strong>
+            </span>
+          </div>
+          <div class="flex gap-6 mb-1">
+            ${estados.map((estado, idx) => {
+              const passou = concluidos.includes(estado);
+              const podeClicar = !passou && estados[idx - 1] === estadoAtual && estadoAtual !== 'Resolvido';
+              return `
+                <div class="flex items-center gap-2 estado-etapa ${podeClicar ? 'cursor-pointer hover:opacity-80' : 'cursor-default'}"
+                     data-estado="${estado}" ${podeClicar ? '' : 'data-disabled'}>
+                  <div class="${passou ? `bg-${cores[estado]}` : `border-2 border-${cores[estado]}` } w-3.5 h-3.5 rounded-full"></div>
+                  <span class="${passou ? `text-${cores[estado]} font-semibold` : 'text-gray-600'} text-sm">${estado}</span>
+                </div>
+              `;
+            }).join('')}
+          </div>
+        `;
+      };
+
+      item.innerHTML = `
+        <div class="absolute top-2 right-2 flex gap-4 text-sm">
+          <button class="editar text-blue-600 hover:underline">Editar</button>
+          <button class="remover text-red-600 hover:underline">Remover</button>
+        </div>
+        <h3 class="font-semibold text-gray-800">${titulo}</h3>
+        <p class="text-sm text-gray-700 whitespace-pre-line mb-2">${descricao}</p>
+        <div class="estado-container">${renderEstados()}</div>
+      `;
+
+      const atualizarEstado = (novoEstado) => {
+        estadoAtual = novoEstado;
+        if (!concluidos.includes(novoEstado)) concluidos.push(novoEstado);
+        item.querySelector('.estado-container').innerHTML = renderEstados();
+        configurarEstados();
+      };
+
+      const configurarEstados = () => {
+        item.querySelectorAll('.estado-etapa').forEach(etapa => {
+          const estado = etapa.dataset.estado;
+          const isDisabled = etapa.hasAttribute('data-disabled');
+          if (!isDisabled) {
+            etapa.addEventListener('click', () => atualizarEstado(estado));
+          }
+        });
+      };
+
+      item.querySelector('.remover').addEventListener('click', () => item.remove());
+      item.querySelector('.editar').addEventListener('click', () => alert('Funcionalidade de edição ainda não implementada.'));
+
+      incidentList.prepend(item);
+      configurarEstados();
+      modal.classList.add('hidden');
+      incidentForm.reset();
+      maintenanceFields.classList.add('hidden');
+    });
+  </script>
+</body>
+</html>
