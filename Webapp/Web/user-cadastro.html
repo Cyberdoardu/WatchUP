@@ -16,30 +16,6 @@
                 <button type="submit" class="w-full bg-green-700 text-white py-2 px-4 rounded-md hover:bg-green-800 transition duration-200 focus:outline-none focus:ring-2 focus:ring-green-700 focus:ring-offset-2">Cadastrar</button>
             </form>
         </div>
-        <script>
-            document.getElementById('userCadastroForm')
-                .addEventListener('submit', e => {
-                    e.preventDefault();
-                    fetch('php/user-cadastro.php', {
-                        method: 'POST',
-                        body: new FormData(e.target)
-                    })
-                    .then(r => r.json())
-                    .then(response => {
-                        if (response.sucesso) {
-                            alert(response.mensagem);
-                            if (response.redirecionar) {
-                                window.location.href = response.redirecionar;
-                            }
-                        } else {
-                            alert(response.mensagem);
-                        }
-                    })
-                    .catch(error => {
-                        console.error('Erro:', error);
-                        alert('Ocorreu um erro durante o cadastro');
-                    });
-                });
-        </script>       
+        <script src="js/user-cadastro.js"></script>
     </body>
 </html>
