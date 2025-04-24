@@ -2,6 +2,7 @@
     <head>
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1">
+        <script src="js/login.js" defer></script>
         <title>Login</title>
         <script src="https://cdn.tailwindcss.com"></script>
     </head>
@@ -15,30 +16,5 @@
             </form>
             <p class="mt-4 text-center text-gray-600 text-sm">Caso não possua uma conta, solicite ao administrador</p>
         </div>
-        <script>
-            document.getElementById('loginForm')
-                .addEventListener('submit', e => {
-                    e.preventDefault();
-                    fetch('php/login.php', {
-                        method: 'POST',
-                        body: new FormData(e.target)
-                    })
-                    .then(r => r.json())
-                    .then(response => {
-                        if (response.sucesso) {
-                            alert(response.mensagem);
-                            if (response.redirecionar) {
-                                window.location.href = response.redirecionar;
-                            }
-                        } else {
-                            alert(response.mensagem);
-                        }
-                    })
-                    .catch(error => {
-                        console.error('Erro:', error);
-                        alert('Ocorreu um erro durante o login');
-                    });
-                });
-        </script>    
     </body>
 </html>

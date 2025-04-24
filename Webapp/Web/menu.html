@@ -13,6 +13,7 @@
             flex: 1 0 auto;
             min-width: 1px;
         }
+        
         .segmento-tempo:not(:last-child)::after {
             content: '';
             position: absolute;
@@ -27,6 +28,7 @@
             gap: 1px;
             width: 100%;
         }
+        
     </style>
 </head>
 <body class="bg-gray-50">
@@ -74,36 +76,7 @@
             </div>
         </div>
     </div>
+    <script src="js/menu.js" defer></script>
 
-    <script>
-        document.addEventListener('DOMContentLoaded', function() {
-            const timeline = document.getElementById('timeline');
-            const totalDias = 90;
-            
-            // Limpar qualquer conteúdo existente
-            timeline.innerHTML = '';
-            
-            // Criar 90 segmentos uniformes
-            for (let i = 0; i < totalDias; i++) {
-                const segmento = document.createElement('div');
-                segmento.className = 'segmento-tempo';
-                
-                // Adicionar tooltip com o número do dia (opcional)
-                segmento.title = `Dia ${i+1} - 100% disponível`;
-                
-                timeline.appendChild(segmento);
-            }
-            
-            // Ajustar espaçamento uniforme
-            const segmentos = document.querySelectorAll('.segmento-tempo');
-            const espacamento = 1; // em pixels
-            segmentos.forEach(seg => {
-                seg.style.marginRight = `${espacamento}px`;
-            });
-            
-            // Remover margem do último elemento
-            segmentos[segmentos.length - 1].style.marginRight = '0';
-        });
-    </script>
 </body>
 </html>
