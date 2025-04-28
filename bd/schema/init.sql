@@ -14,12 +14,18 @@ CREATE TABLE IF NOT EXISTS agents (
     agent_id VARCHAR(255) PRIMARY KEY,
     last_seen DATETIME,
     status ENUM('active', 'inactive', 'maintenance') DEFAULT 'active'
-);
+);  
 
 -- Nova tabela de definição de monitores
 CREATE TABLE IF NOT EXISTS monitors (
     id INT AUTO_INCREMENT PRIMARY KEY,
     monitor_name VARCHAR(255) NOT NULL,
+    failure_threshold_downtime INT DEFAULT 3,
+    failure_threshold_partial_degradation INT DEFAULT 1,
+    response_time_threshold_degraded INT DEFAULT 500,
+    response_time_threshold_critical INT DEFAULT 1000,
+    current_status ENUM('operational', 'degraded', 'partially_degraded', 'critical', 'downtime') DEFAULT 'operational',
+
     check_type ENUM('ping', 'http_status', 'api_response', 'custom_script') NOT NULL,
     parameters JSON NOT NULL,
     expected_match VARCHAR(255) DEFAULT NULL,

@@ -181,6 +181,70 @@ def handle_targets():
             cursor.close()
             conn.close()
 
+def count_consecutive_failures(cursor, monitor_id):
+    cursor.execute("""
+        SELECT COUNT(*) FROM raw_data
+        WHERE monitor_id = %s AND success = 0
+        ORDER BY timestamp DESC
+    """, (monitor_id,))
+    return cursor.fetchone()[0]
+
+def update_monitor_status(conn, cursor, monitor_id, response_time, success):
+    """Updates the monitor status based on response time and success rate."""
+    try:
+        cursor.execute("""
+            SELECT failure_threshold_downtime, failure_threshold_partial_degradation,
+                   response_time_threshold_degraded, response_time_threshold_critical
+            FROM monitors WHERE id = %s
+        """, (monitor_id,))
+        monitor_config = cursor.fetchone()
+
+        if monitor_config is None:
+            app.logger.error(f"Monitor config not found for ID: {monitor_id}")
+            return
+
+        failure_threshold_downtime, failure_threshold_partial_degradation, response_time_threshold_degraded, response_time_threshold_critical = monitor_config
+        
+        current_status = "operational"
+        
+        if response_time is not None:
+            if response_time > response_time_threshold_critical:
+                current_status = "critical"
+            elif response_time > response_time_threshold_degraded:
+                current_status = "degraded"
+
+        if success == 0:
+            cursor.execute("""
+                    SELECT success FROM raw_data
+                    WHERE monitor_id = %s
+                    ORDER BY timestamp DESC
+                """, (monitor_id,))
+
+            all_results = cursor.fetchall()
+            consecutive_failures = 0
+            for result in all_results:
+            consecutive_failures = cursor.fetchone()[0]
+            
+            if consecutive_failures >= failure_threshold_downtime:
+                current_status = "downtime"
+            elif consecutive_failures >= failure_threshold_partial_degradation:
+                current_status = "partially_degraded"
+
+        cursor.execute("""
+            UPDATE monitors SET current_status = %s WHERE id = %s
+        """, (current_status, monitor_id))
+        
+        conn.commit()
+
+    except Error as e:
+        app.logger.error(f"Error updating monitor status: {e}")
+
+
+
+
+
+
+
 @app.route('/metrics', methods=['POST'])
 def receive_metrics():
     try:
@@ -203,6 +267,8 @@ def receive_metrics():
                 metric.get('raw_output', '')
             ))
         
+            
+        # Insert all metrics for this monitor_id
         cursor.executemany("""
             INSERT INTO raw_data 
             (monitor_id, agent_id, timestamp, response_time, success, raw_result)
@@ -211,6 +277,14 @@ def receive_metrics():
         
         conn.commit()
         return jsonify({'status': 'received', 'count': len(values)})
+        
+        for metric in data['metrics']:
+            monitor_id = metric['monitor_id']
+            response_time = metric.get('response_time')
+            success = metric['success']
+            
+            update_monitor_status(conn, cursor, monitor_id, response_time, success)
+
     
     except Error as e:
         conn.rollback()
