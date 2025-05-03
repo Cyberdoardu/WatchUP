@@ -13,6 +13,7 @@ import time
 import subprocess
 import requests
 import re  # Adicionando o import do módulo re
+import hashlib
 from threading import Thread
 from flask import Flask, request, jsonify
 import logging
@@ -22,6 +23,9 @@ logging.basicConfig(level=logging.INFO)
 app = Flask(__name__)
 targets = []
 registered = False
+
+SALT = "salzinho_pra_dar_g0st0"
+
 
 def ping_check(target, timeout=5, count=4):
     command = f"ping -c {count} -W {timeout} {target}"
@@ -124,6 +128,11 @@ def process_monitor(monitor):
     finally:
         result['response_time'] = (time.time() - start_time) * 1000  # Tempo total
     
+def hash_agent_name(agent_name, salt):
+    combined = f"{agent_name}:{salt}"
+    hashed = hashlib.sha256(combined.encode()).hexdigest()
+    return hashed
+
 def register_agent():
     global registered
     max_retries = 10
@@ -131,10 +140,12 @@ def register_agent():
     
     while not registered and retry_count < max_retries:
         try:
+            hashed_agent_id = hash_agent_name(os.environ['AGENT_NAME'], SALT)
             response = requests.post(
                 f"{os.environ['CENTRAL_SERVER_URL']}/register",
-                json={'agent_name': os.environ['AGENT_NAME']},
+                json={'agent_name': os.environ['AGENT_NAME'], 'agent_id': hashed_agent_id},
                 timeout=10
+                
             )
             if response.ok:
                 registered = True
@@ -149,11 +160,12 @@ def register_agent():
 
             
 def send_heartbeat():
+    hashed_agent_id = hash_agent_name(os.environ['AGENT_NAME'], SALT)
     while True:
         try:
             requests.post(
                 f"{os.environ['CENTRAL_SERVER_URL']}/heartbeat",
-                json={'agent_name': os.environ['AGENT_NAME']},
+                json={'agent_id': hashed_agent_id},
                 timeout=3
             )
         except Exception as e:
@@ -161,11 +173,12 @@ def send_heartbeat():
         time.sleep(30)
 
 def update_targets():
+    hashed_agent_id = hash_agent_name(os.environ['AGENT_NAME'], SALT)
     while True:
         try:
             print(f"\n=== ATUALIZANDO TARGETS ===")
             response = requests.get(
-                f"{os.environ['CENTRAL_SERVER_URL']}/targets",
+                f"{os.environ['CENTRAL_SERVER_URL']}/targets?agent_id={hashed_agent_id}",
                 params={'agent': os.environ['AGENT_NAME']},
                 timeout=5
             )
@@ -254,12 +267,14 @@ def monitoring_loop():
             if metrics:
                 print("\nEnviando métricas para o servidor central...")
                 try:
+                    hashed_agent_id = hash_agent_name(os.environ['AGENT_NAME'], SALT)
                     response = requests.post(
                         f"{os.environ['CENTRAL_SERVER_URL']}/metrics",
-                        json={'agent_id': os.environ['AGENT_NAME'], 'metrics': metrics},
+                        json={'agent_id': hashed_agent_id, 'metrics': metrics},
                         timeout=10
                     )
                     response.raise_for_status()
+                    
                     print(f"Status do envio: {response.status_code}")
                 except Exception as e:
                     print(f"Falha no envio de métricas: {str(e)}")
