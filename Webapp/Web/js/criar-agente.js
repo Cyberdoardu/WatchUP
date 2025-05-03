@@ -1,30 +1,32 @@
 document.addEventListener('DOMContentLoaded', () => {
-    const agentNameInput = document.querySelector('input[name="agent-name"]'); // Change the query selector
-    const centralServerIpInput = document.querySelector('input[name="central-server-ip"]'); // Change the query selector
-    const dockerCommandDiv = document.querySelector('div#docker-command'); // Change the query selector
-    const createButton = document.querySelector('button#create-button'); // Change the query selector
-    
-    console.log("agentNameInput found: " + (agentNameInput !== null)); // Add log
-    console.log("centralServerIpInput found: " + (centralServerIpInput !== null)); // Add log
-    console.log("dockerCommandDiv found: " + (dockerCommandDiv !== null)); // Add log
-    console.log("createButton found: " + (createButton !== null)); // Add log
-
     function updateDockerCommand() {
+        const agentNameInput = document.querySelector('input[name="agent-name"]');
+        const centralServerIpInput = document.querySelector('input[name="central-server-ip"]');
+        const dockerCommandDiv = document.querySelector('div#docker-command');
         if (!agentNameInput || !centralServerIpInput || !dockerCommandDiv) return;
         const agentName = agentNameInput.value;
         const centralServerIp = centralServerIpInput.value;
         const dockerCommand = `docker run --name ${agentName} -e AGENT_NAME=${agentName} -e CENTRAL_SERVER_URL=http://${centralServerIp}:5000 --network host -d devsecops-monitoring-agent:latest`;
         dockerCommandDiv.textContent = dockerCommand;
     }
+    const agentNameInput = document.querySelector('input[name="agent-name"]');
+    const centralServerIpInput = document.querySelector('input[name="central-server-ip"]');
+    const dockerCommandDiv = document.querySelector('div#docker-command');
+    const createButton = document.querySelector('button#create-button');
+    
+    console.log("agentNameInput found: " + (agentNameInput !== null));
+    console.log("centralServerIpInput found: " + (centralServerIpInput !== null));
+    console.log("dockerCommandDiv found: " + (dockerCommandDiv !== null));
+    console.log("createButton found: " + (createButton !== null));
 
-    updateDockerCommand();
-
+    
     agentNameInput.addEventListener('input', updateDockerCommand);
     centralServerIpInput.addEventListener('input', updateDockerCommand);
 
     createButton.addEventListener('click', () => {
+        if (!agentNameInput) return;
         const agentName = agentNameInput.value;
-        fetch('/create-agent', {
+         fetch('/create-agent', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -36,4 +38,5 @@ document.addEventListener('DOMContentLoaded', () => {
             alert(JSON.stringify(data));
         });
     });
+    updateDockerCommand();
 });
