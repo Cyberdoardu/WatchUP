@@ -110,6 +110,30 @@ def register_agent():
             cursor.close()
             conn.close()
 
+
+@app.route('/agents', methods=['GET'])
+def list_agents():
+    conn = None
+    cursor = None
+    try:
+        conn = connection_pool.get_connection()
+        cursor = conn.cursor(dictionary=True)
+
+        cursor.execute("SELECT name, agent_id FROM agents")
+        agents = cursor.fetchall()
+
+        return jsonify(agents), 200
+    except Error as e:
+        app.logger.error(f"Database error: {e}")
+        return jsonify({'error': str(e)}), 500
+    finally:
+        if conn and conn.is_connected():
+            if cursor:
+                cursor.close()
+            conn.close()
+
+
+
 @app.route('/heartbeat', methods=['POST'])
 def receive_heartbeat():
     data = request.json
@@ -413,13 +437,14 @@ def create_monitor():
         monitor_id = cursor.lastrowid
         
         # Criar associação com agent
+        hashed_agent_id = hash_agent_name(data['agent'], SALT)
         cursor.execute("""
             INSERT INTO monitor_assignments 
             (agent_id, monitor_id, is_primary)
             VALUES (%s, %s, %s)
         """, (
-            data['agent'],
-            monitor_id,
+            hashed_agent_id,
+           monitor_id,
             data.get('is_primary', True)
         ))
         
