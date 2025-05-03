@@ -132,6 +132,37 @@ def list_agents():
                 cursor.close()
             conn.close()
 
+@app.route('/create-agent', methods=['POST'])
+def create_agent():
+    conn = None
+    cursor = None
+    try:
+        data = request.json
+        agent_name = data['agent_name']
+        hashed_agent_id = hash_agent_name(agent_name, SALT)
+
+        conn = connection_pool.get_connection()
+        cursor = conn.cursor()
+
+        cursor.execute(
+            "INSERT INTO agents (agent_id, name) VALUES (%s, %s)",
+            (hashed_agent_id, agent_name)
+        )
+        conn.commit()
+
+        return jsonify({
+            'message': 'Agent created successfully',
+            'agent_name': agent_name,
+            'hashed_agent_id': hashed_agent_id
+        }), 201
+    except Error as e:
+        app.logger.error(f"Error creating agent: {e}")
+        return jsonify({'error': str(e)}), 500
+    finally:
+        if conn and conn.is_connected():
+            cursor.close()
+            conn.close()
+
 
 
 @app.route('/heartbeat', methods=['POST'])
