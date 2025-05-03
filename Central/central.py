@@ -137,7 +137,7 @@ def list_agents():
 @app.route('/heartbeat', methods=['POST'])
 def receive_heartbeat():
     data = request.json
-    agent_id = data['agent_name']
+    agent_id = data['agent_id']
     
     try:
         conn = connection_pool.get_connection()
@@ -175,7 +175,7 @@ def health_check():
             
 @app.route('/targets', methods=['GET', 'POST'])
 def handle_targets():
-    agent_id = request.args.get('agent')
+    agent_id = request.args.get('agent_id')
     
     try:
         conn = connection_pool.get_connection()
@@ -347,14 +347,14 @@ def receive_metrics():
 
 @app.route('/metrics', methods=['GET'])
 def get_metrics():
-    agent_id = request.args.get('agent')
+    agent_id = request.args.get('agent_id')
     monitor_name = request.args.get('monitor')
     
     if not agent_id or not monitor_name:
-        return jsonify({'error': 'Parâmetros agent e monitor são obrigatórios'}), 400
+        return jsonify({'error': 'Parâmetros agent_id e monitor são obrigatórios'}), 400
     
     try:
-        conn = connection_pool.get_connection()
+        conn = connection_pool.get_connection() 
         cursor = conn.cursor(dictionary=True)
         
         # Verificar existência do monitor
@@ -436,14 +436,20 @@ def create_monitor():
         
         monitor_id = cursor.lastrowid
         
+        # Check if the agent exists
+        cursor.execute("SELECT agent_id FROM agents WHERE agent_id = %s", (data['agent'],))
+        agent_exists = cursor.fetchone()
+
+        if not agent_exists:
+            return jsonify({'error': 'Agent not found'}), 404
+
         # Criar associação com agent
-        hashed_agent_id = hash_agent_name(data['agent'], SALT)
         cursor.execute("""
             INSERT INTO monitor_assignments 
             (agent_id, monitor_id, is_primary)
             VALUES (%s, %s, %s)
         """, (
-            hashed_agent_id,
+            data['agent'],
            monitor_id,
             data.get('is_primary', True)
         ))
