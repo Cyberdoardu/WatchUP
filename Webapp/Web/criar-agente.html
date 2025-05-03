@@ -16,17 +16,17 @@
     <div class="p-4 w-full max-w-2xl bg-white rounded-lg shadow-md">
         <div>
             <label for="agentName" class="block mb-2">Nome do Agente:</label>
-            <input type="text" id="agentName" class="border border-gray-300 rounded-md px-3 py-2 w-full mb-4"
+            <input type="text" id="agentName" name="agent-name" class="border border-gray-300 rounded-md px-3 py-2 w-full mb-4"
                 placeholder="agent-01">
         </div>
 
         <div>
             <label for="centralServerIp" class="block mb-2">IP do Servidor Central:</label>
-            <input type="text" id="centralServerIp" class="border border-gray-300 rounded-md px-3 py-2 w-full mb-4"
+            <input type="text" id="centralServerIp" name="central-server-ip" class="border border-gray-300 rounded-md px-3 py-2 w-full mb-4"
                 value="localhost">
         </div>
 
-        <div id="dockerCommand" class="bg-gray-100 rounded-md p-3 mt-4">
+        <div id="docker-command" class="bg-gray-100 rounded-md p-3 mt-4">
             docker run --name &lt;AGENT_NAME&gt; -e AGENT_NAME=&lt;AGENT_NAME&gt; -e
             CENTRAL_SERVER_URL=&lt;CENTRAL_SERVER_IP&gt; --network host -d devsecops-monitoring-agent:latest
         </div>

@@ -1,10 +1,16 @@
 document.addEventListener('DOMContentLoaded', () => {
-    const agentNameInput = document.querySelector('input[name="agent-name"]');
-    const centralServerIpInput = document.querySelector('input[name="central-server-ip"]');
-    const dockerCommandDiv = document.querySelector('#docker-command');
-    const createButton = document.querySelector('#create-button');
+    const agentNameInput = document.querySelector('input[name="agent-name"]'); // Change the query selector
+    const centralServerIpInput = document.querySelector('input[name="central-server-ip"]'); // Change the query selector
+    const dockerCommandDiv = document.querySelector('div#docker-command'); // Change the query selector
+    const createButton = document.querySelector('button#create-button'); // Change the query selector
+    
+    console.log("agentNameInput found: " + (agentNameInput !== null)); // Add log
+    console.log("centralServerIpInput found: " + (centralServerIpInput !== null)); // Add log
+    console.log("dockerCommandDiv found: " + (dockerCommandDiv !== null)); // Add log
+    console.log("createButton found: " + (createButton !== null)); // Add log
 
     function updateDockerCommand() {
+        if (!agentNameInput || !centralServerIpInput || !dockerCommandDiv) return;
         const agentName = agentNameInput.value;
         const centralServerIp = centralServerIpInput.value;
         const dockerCommand = `docker run --name ${agentName} -e AGENT_NAME=${agentName} -e CENTRAL_SERVER_URL=http://${centralServerIp}:5000 --network host -d devsecops-monitoring-agent:latest`;
