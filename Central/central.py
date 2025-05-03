@@ -223,7 +223,7 @@ def update_monitor_status(conn, cursor, monitor_id, response_time, success):
             all_results = cursor.fetchall()
             consecutive_failures = 0
             for result in all_results:
-            consecutive_failures = cursor.fetchone()[0]
+                consecutive_failures = cursor.fetchone()[0]
             
             if consecutive_failures >= failure_threshold_downtime:
                 current_status = "downtime"
