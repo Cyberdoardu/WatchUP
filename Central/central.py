@@ -1,6 +1,7 @@
 import json
 import os
 import time
+import hashlib
 from flask import Flask, request, jsonify
 from datetime import datetime, timedelta
 import threading
@@ -23,6 +24,7 @@ db_config = {
     "pool_reset_session": True
 }
 
+SALT = "salzinho_pra_dar_g0st0"
 # Criar pool de conexões
 def create_connection_pool():
     for _ in range(10):  # 10 tentativas
@@ -35,6 +37,12 @@ def create_connection_pool():
     raise Exception("Não foi possível conectar ao MariaDB após 10 tentativas")
 
 connection_pool = create_connection_pool()
+
+
+def hash_agent_name(agent_name, salt):
+    combined = f"{agent_name}:{salt}"
+    hashed = hashlib.sha256(combined.encode()).hexdigest()
+    return hashed
 
 
 def cleanup_inactive_agents():
@@ -63,25 +71,42 @@ def cleanup_inactive_agents():
 
 @app.route('/register', methods=['POST'])
 def register_agent():
-    data = request.json
-    agent_id = data['agent_name']
-    
+    conn = None
+    cursor = None
     try:
+        data = request.json
+        agent_name = data['agent_name']
+        hashed_agent_name = hash_agent_name(agent_name, SALT)
+
         conn = connection_pool.get_connection()
         cursor = conn.cursor()
         
-        # Query corrigida para nova estrutura da tabela agents
+        # Check if the agent with the calculated hash already exists
+        cursor.execute("SELECT * FROM agents WHERE agent_id = %s", (hashed_agent_name,))
+        existing_agent = cursor.fetchone()
+
+        if existing_agent:
+            # Agent exists, updating last_seen and returning re-login message
+            cursor.execute("UPDATE agents SET last_seen = %s WHERE agent_id = %s", (datetime.now(), hashed_agent_name))
+            conn.commit()
+            return jsonify({'message': 'Agent re-logged in successfully'}), 200
+
+        # Agent does not exist, registering new agent
         cursor.execute(
-            "INSERT INTO agents (agent_id, last_seen, status) VALUES (%s, %s, %s)",
-            (agent_id, datetime.now(), 'active')  # Removido o campo targets
+            "INSERT INTO agents (agent_id, last_seen, name) VALUES (%s, %s, %s)",
+            (hashed_agent_name, datetime.now(), agent_name)
         )
-        
         conn.commit()
-        return jsonify({'status': 'registered'})
-    except Error as e:
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'message': 'Agent registered successfully'}), 201
+    except mysql.connector.Error as err:
+        if conn:
+            conn.rollback()
+        app.logger.error(f"Database error: {err}")
+        return jsonify({'error': f'Database error: {err}'}), 500
+    except Exception as err:
+        return jsonify({'error': f'An unexpected error occurred: {err}'}), 500
     finally:
-        if conn.is_connected():
+        if conn and conn.is_connected():
             cursor.close()
             conn.close()
 
