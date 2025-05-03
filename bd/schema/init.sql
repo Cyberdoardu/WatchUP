@@ -12,6 +12,7 @@ CREATE TABLE IF NOT EXISTS usuarios (
 
 CREATE TABLE IF NOT EXISTS agents (
     agent_id VARCHAR(255) PRIMARY KEY,
+    name VARCHAR(255),
     last_seen DATETIME,
     status ENUM('active', 'inactive', 'maintenance') DEFAULT 'active'
 );  
