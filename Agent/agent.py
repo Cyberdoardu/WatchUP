@@ -1,13 +1,3 @@
-# = == = = = == = LEMBRETE: = = = = = == = = = =
-#
-#
-#
-# Adicionar o tempo entre requisições no banco e monitor
-#
-#
-#
-#= = = = = = == = = = = = = == = = = = = = = ===
-
 import os
 import time
 import subprocess
@@ -20,7 +10,6 @@ import logging
 from datetime import datetime
 logging.basicConfig(level=logging.INFO)
 
-app = Flask(__name__)
 targets = []
 registered = False
 
@@ -290,4 +279,5 @@ if __name__ == '__main__':
     Thread(target=send_heartbeat, daemon=True).start()
     Thread(target=update_targets, daemon=True).start()
     Thread(target=monitoring_loop, daemon=True).start()
-    app.run(host='0.0.0.0', port=5001)
+    while True:
+        time.sleep(15)
