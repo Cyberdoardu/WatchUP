@@ -1,0 +1,12 @@
+{
+    "name": "watchup/webapp",
+    "require": {
+        "php": ">=8.0",
+        "vlucas/phpdotenv": "^5.0",
+        "firebase/php-jwt": "^6.0"
+    },
+    "config": {
+        "optimize-autoloader": true,
+        "platform-check": false
+    }
+}

@@ -26,6 +26,20 @@
                 value="localhost">
         </div>
 
+        <section class="mt-6">
+            <h2 class="text-2xl font-bold mb-4">Instruções para executar o agente</h2>
+            <div class="bg-gray-100 rounded-md p-3 mb-3 whitespace-pre-wrap">
+                <p class="mb-2">
+                    Para salvar a imagem do agente no servidor, execute o seguinte comando:
+                </p>
+                <code class="block bg-gray-200 p-2 rounded">docker save -o /caminho/para/saida/imagem.tar meu-repositorio:minha-tag</code>
+                <p class="mt-3 mb-2">
+                    Para carregar a imagem do agente em outra máquina, execute:
+                </p>
+                <code class="block bg-gray-200 p-2 rounded">docker load -i ~/imagem.tar</code>
+            </div>
+        </section>
+
         <div id="docker-command" class="bg-gray-100 rounded-md p-3 mt-4">
             docker run --name &lt;AGENT_NAME&gt; -e AGENT_NAME=&lt;AGENT_NAME&gt; -e 
             CENTRAL_SERVER_URL=&lt;CENTRAL_SERVER_IP&gt; --network host -d devsecops-monitoring-agent:latest

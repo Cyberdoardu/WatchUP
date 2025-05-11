@@ -1,5 +1,0 @@
-{
-    "require": {
-        "datastax/php-driver": "1.3.2"
-    }
-}

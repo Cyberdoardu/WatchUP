@@ -1,4 +1,4 @@
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', function() {
     function updateDockerCommand() {
         const agentNameInput = document.querySelector('input[name="agent-name"]');
         const centralServerIpInput = document.querySelector('input[name="central-server-ip"]');
@@ -23,20 +23,63 @@ document.addEventListener('DOMContentLoaded', () => {
     agentNameInput.addEventListener('input', updateDockerCommand);
     centralServerIpInput.addEventListener('input', updateDockerCommand);
 
+    
+
     createButton.addEventListener('click', () => {
-        if (!agentNameInput) return;
+        if (!agentNameInput || !createButton) return;
         const agentName = agentNameInput.value;
-         fetch('/create-agent', {
+        
+        let timerDiv = document.getElementById('timer');
+        if (!timerDiv) {
+          timerDiv = document.createElement('div');
+          timerDiv.id = 'timer';
+          createButton.parentNode.insertBefore(timerDiv, createButton.nextSibling);
+        }
+        
+        createButton.disabled = true;
+        timerDiv.textContent = "Aguardando criação de agente..."
+        
+        
+        let timerInterval;
+        let remainingTime = 60;
+        
+        const updateTimerDisplay = () => {
+            timerDiv.textContent = `Tempo restante: ${remainingTime} segundos`;
+        }
+
+        fetch('php/criar-agente.php', {
             method: 'POST',
             headers: {
-                'Content-Type': 'application/json',
+                'Content-Type': 'application/x-www-form-urlencoded'
             },
-            body: JSON.stringify({ agent_name: agentName }),
+            body: `action=create_agent&agent_name=${agentName}`
         })
         .then(response => response.json())
         .then(data => {
-            alert(JSON.stringify(data));
+            if (data.status === 'success') {
+                 timerInterval = setInterval(() => {
+                    updateTimerDisplay();
+                    remainingTime--;
+                    if (remainingTime < 0) {
+                        clearInterval(timerInterval);
+                        timerDiv.textContent = 'Falha na criação do agente.';
+                        createButton.disabled = false;
+                    }else if (data.status == "connected"){
+                        clearInterval(timerInterval);
+                        timerDiv.textContent = 'Agente criado com sucesso.';
+                        setTimeout(() => {
+                            location.reload(); 
+                        }, 2000);
+                    }
+                }, 1000);               
+            }else{
+                alert(response);
+            }
+        })
+        .catch(error => {
+            console.error('Erro:', error);
+            alert('Erro ao se comunicar com o servidor.');
         });
     });
-    updateDockerCommand();
+        updateDockerCommand();
 });
