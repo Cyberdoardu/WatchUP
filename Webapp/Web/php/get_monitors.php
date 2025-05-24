@@ -3,6 +3,8 @@
 header('Content-Type: application/json');
 require_once 'connection.php';
 
+$conn = MariaDBConnection::getConnection(); // ← ISSO É ESSENCIAL
+
 $response = array();
 $response['data'] = array();
 
