@@ -1,57 +1,49 @@
-document.addEventListener('DOMContentLoaded', function() {
-    // Function to load monitors and display their status
+document.addEventListener('DOMContentLoaded', function () {
     function loadMonitors() {
         fetch('php/get_monitors.php')
             .then(response => response.json())
             .then(data => {
                 const monitorsList = document.getElementById('monitors-list');
-                monitorsList.innerHTML = ''; // Clear existing content
-                data.forEach(monitor => { // Add outer div for each monitor
-                    // Create the main monitor element
+                monitorsList.innerHTML = '';
+
+                data.data.forEach(monitor => {
                     const monitorElement = document.createElement('div');
-                    monitorElement.classList.add('monitor-item', 'mb-4', 'p-4', 'border', 'rounded'); // Add some basic Tailwind classes
-                    // Create the timeline container
-                    const timelineElement = document.createElement('div');
-                    timelineElement.classList.add('flex', 'mt-2'); // Use flexbox for the timeline
+                    monitorElement.classList.add('bg-white', 'border', 'rounded', 'p-4', 'shadow-sm');
 
-                    // Add monitor name and current status
-                    const monitorInfo = document.createElement('div');
-                    monitorInfo.innerHTML = `
-                        <h3 class="text-lg font-semibold">${monitor.monitor_name}</h3>
-                        <p>Status: ${monitor.current_status}</p>
+                    const header = document.createElement('div');
+                    header.classList.add('flex', 'justify-between', 'items-center', 'mb-2');
+                    header.innerHTML = `
+                        <h3 class="text-lg font-semibold text-gray-800">${monitor.monitor_name}</h3>
+                        <span class="text-sm text-gray-600">${monitor.current_status}</span>
                     `;
-                    monitorElement.appendChild(monitorInfo);
 
-                    // Generate the 90-day timeline squares
+                    const timeline = document.createElement('div');
+                    timeline.classList.add('flex', 'gap-[1px]', 'h-2', 'mt-2');
+
                     monitor.history_90_days.forEach(status => {
-                        const daySquare = document.createElement('div');
-                        daySquare.classList.add('w-2', 'h-2', 'mr-0.5'); // Fixed size and margin using Tailwind classes
-                        // Add Tailwind background color classes based on status
-                        if (status === 'available') daySquare.classList.add('bg-green-500');
-                        else if (status === 'unavailable') daySquare.classList.add('bg-red-500');
-                        else daySquare.classList.add('bg-gray-400'); // For 'no_data' or any other status
-                        timelineElement.appendChild(daySquare);
+                        const bar = document.createElement('div');
+                        bar.classList.add('flex-1');
+
+                        if (status === 'available') {
+                            bar.classList.add('bg-green-500');
+                        } else if (status === 'unavailable') {
+                            bar.classList.add('bg-red-500');
+                        } else {
+                            bar.classList.add('bg-gray-300');
+                        }
+
+                        timeline.appendChild(bar);
                     });
 
-                    monitorElement.innerHTML = `
-                        <p>Status: ${monitor.current_status}</p>
-                    `;
+                    monitorElement.appendChild(header);
+                    monitorElement.appendChild(timeline);
                     monitorsList.appendChild(monitorElement);
-                }); // Close the forEach loop
+                });
             })
             .catch(error => {
-                console.error('Error fetching monitors:', error);
+                console.error('Erro ao carregar monitores:', error);
             });
     }
 
-    // Call the function to load monitors when the page loads
     loadMonitors();
-
-    // The existing timeline code remains
-    // const timeline = document.getElementById('timeline');
-    // const totalDias = 90;
-
-    // ... (rest of the timeline code)
-    // This part of the code is commented out as it was not part of the original request to modify
-    // and its purpose is unclear without the corresponding HTML structure.
 });
