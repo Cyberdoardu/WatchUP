@@ -1,0 +1,235 @@
+# Kubernetes Manifests para a Aplicação WatchUP
+
+# --- Secrets para dados sensíveis ---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: mariadb-secret
+type: Opaque
+stringData:
+  MARIADB_ROOT_PASSWORD: "rootpassword"
+  MARIADB_PASSWORD: "watchpassword"
+
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: central-server-db-secret
+type: Opaque
+stringData:
+  DB_PASSWORD: "watchpassword"
+
+# --- PersistentVolumeClaim para os dados do MariaDB ---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: mariadb-data-pvc
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi
+
+# --- ConfigMap para o script de inicialização do MariaDB ---
+# Este será populado pelo comando 'kubectl create configmap'
+# a partir do arquivo ./bd/schema/init.sql do seu repositório
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: mariadb-init-scripts
+data: {} # O Jenkinsfile irá preencher isso ao criar o ConfigMap
+
+# --- MariaDB Deployment ---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mariadb
+  labels:
+    app: mariadb
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: mariadb
+  template:
+    metadata:
+      labels:
+        app: mariadb
+    spec:
+      containers:
+        - name: mariadb
+          image: mariadb:latest # Imagem pública do Docker Hub
+          ports:
+            - containerPort: 3306
+          env:
+            - name: MARIADB_ROOT_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: mariadb-secret
+                  key: MARIADB_ROOT_PASSWORD
+            - name: MARIADB_DATABASE
+              value: "watchup"
+            - name: MARIADB_USER
+              value: "watchuser"
+            - name: MARIADB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: mariadb-secret
+                  key: MARIADB_PASSWORD
+          volumeMounts:
+            - name: mariadb-persistent-storage
+              mountPath: /var/lib/mysql
+            - name: mariadb-initdb
+              mountPath: /docker-entrypoint-initdb.d # O MariaDB executa scripts daqui
+      volumes:
+        - name: mariadb-persistent-storage
+          persistentVolumeClaim:
+            claimName: mariadb-data-pvc
+        - name: mariadb-initdb
+          configMap:
+            name: mariadb-init-scripts # Referencia o ConfigMap criado pelo Jenkins
+
+---
+# --- MariaDB Service (Apenas interno) ---
+apiVersion: v1
+kind: Service
+metadata:
+  name: mariadb # Nome DNS interno para o serviço
+spec:
+  selector:
+    app: mariadb
+  ports:
+    - port: 3306 # Porta que o serviço expõe
+      targetPort: 3306 # Porta do container MariaDB
+  type: ClusterIP # Acessível apenas dentro do cluster
+
+---
+# --- Central Server Deployment ---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: central-server
+  labels:
+    app: central-server
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: central-server
+  template:
+    metadata:
+      labels:
+        app: central-server
+    spec:
+      containers:
+        - name: central-server
+          image: central-server:latest # Imagem construída localmente pelo Jenkins
+          imagePullPolicy: IfNotPresent # Usa a imagem local se existir, não tenta baixar do hub
+          ports:
+            - containerPort: 5000
+          env:
+            - name: DB_HOST
+              value: "mariadb" # Conecta-se ao serviço MariaDB
+            - name: DB_NAME
+              value: "watchup"
+            - name: DB_USER
+              value: "watchuser"
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: central-server-db-secret
+                  key: DB_PASSWORD
+
+---
+# --- Central Server Service (Externo) ---
+apiVersion: v1
+kind: Service
+metadata:
+  name: central-server
+spec:
+  selector:
+    app: central-server
+  ports:
+    - port: 5000 # Porta que o serviço expõe externamente
+      targetPort: 5000 # Porta do container central-server
+  type: LoadBalancer # Torna acessível externamente (MicroK8s usa NodePort ou MetalLB)
+
+---
+# --- Monitoring Agent Deployment ---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: monitoring-agent
+  labels:
+    app: monitoring-agent
+spec:
+  replicas: 1 # Pode ser aumentado se necessário
+  selector:
+    matchLabels:
+      app: monitoring-agent
+  template:
+    metadata:
+      labels:
+        app: monitoring-agent
+    spec:
+      dnsPolicy: "None" # Necessário para usar dnsConfig customizado
+      dnsConfig:
+        nameservers:
+          - "8.8.8.8"
+          - "1.1.1.1"
+      securityContext:
+        sysctls: # Configurações de kernel para o pod
+          - name: net.ipv4.ip_local_port_range
+            value: "1024 65535"
+      containers:
+        - name: monitoring-agent
+          image: monitoring-agent:latest # Imagem construída localmente pelo Jenkins
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: CENTRAL_SERVER_URL
+              value: "http://central-server:5000" # URL do serviço do Central Server
+            - name: AGENT_NAME
+              value: "agent-01" # Nome configurável para o agente
+            - name: CHECK_INTERVAL
+              value: "30" # Intervalo de verificação em segundos
+
+---
+# --- Webapp Deployment ---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: webapp
+  labels:
+    app: webapp
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: webapp
+  template:
+    metadata:
+      labels:
+        app: webapp
+    spec:
+      containers:
+        - name: webapp
+          image: webapp:latest # Imagem construída localmente pelo Jenkins
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 80 # Porta que o servidor web (Apache/Nginx) escuta dentro do container
+
+---
+# --- Webapp Service (Externo) ---
+apiVersion: v1
+kind: Service
+metadata:
+  name: webapp
+spec:
+  selector:
+    app: webapp
+  ports:
+    - name: http
+      port: 8080 # Porta externa que você usará para acessar a webapp
+      targetPort: 80 # Porta interna do container webapp
+  type: LoadBalancer
