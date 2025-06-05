@@ -1,23 +1,7 @@
-# Kubernetes Manifests para a Aplicação WatchUP
+# Kubernetes Manifests para a Aplicação WatchUP (COM SENHAS HARCODED)
 
-# --- Secrets para dados sensíveis ---
-apiVersion: v1
-kind: Secret
-metadata:
-  name: mariadb-secret
-type: Opaque
-stringData:
-  MARIADB_ROOT_PASSWORD: "rootpassword"
-  MARIADB_PASSWORD: "watchpassword"
-
----
-apiVersion: v1
-kind: Secret
-metadata:
-  name: central-server-db-secret
-type: Opaque
-stringData:
-  DB_PASSWORD: "watchpassword"
+# --- ATENÇÃO: As definições de Secret foram removidas ---
+# --- As senhas estão agora diretamente nos Deployments ---
 
 # --- PersistentVolumeClaim para os dados do MariaDB ---
 apiVersion: v1
@@ -64,19 +48,13 @@ spec:
             - containerPort: 3306
           env:
             - name: MARIADB_ROOT_PASSWORD
-              valueFrom:
-                secretKeyRef:
-                  name: mariadb-secret
-                  key: MARIADB_ROOT_PASSWORD
+              value: "rootpassword" # <<< SENHA HARCODED
             - name: MARIADB_DATABASE
               value: "watchup"
             - name: MARIADB_USER
               value: "watchuser"
             - name: MARIADB_PASSWORD
-              valueFrom:
-                secretKeyRef:
-                  name: mariadb-secret
-                  key: MARIADB_PASSWORD
+              value: "watchpassword" # <<< SENHA HARCODED
           volumeMounts:
             - name: mariadb-persistent-storage
               mountPath: /var/lib/mysql
@@ -136,11 +114,7 @@ spec:
             - name: DB_USER
               value: "watchuser"
             - name: DB_PASSWORD
-              valueFrom:
-                secretKeyRef:
-                  name: central-server-db-secret
-                  key: DB_PASSWORD
-
+              value: "watchpassword" # <<< SENHA HARCODED
 ---
 # --- Central Server Service (Externo) ---
 apiVersion: v1
