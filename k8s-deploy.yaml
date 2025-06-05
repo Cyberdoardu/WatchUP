@@ -230,6 +230,6 @@ spec:
     app: webapp
   ports:
     - name: http # O nome da porta é opcional, mas bom para clareza
-      port: 80 # <<< ALTERADO: Porta externa que você usará para acessar a webapp
+      port: 80 # Porta externa que você usará para acessar a webapp
       targetPort: 80 # Porta interna do container webapp (onde o Apache/Nginx está servindo)
   type: LoadBalancer
