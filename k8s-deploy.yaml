@@ -1,8 +1,5 @@
 # Kubernetes Manifests para a Aplicação WatchUP (COM SENHAS HARCODED)
 
-# --- ATENÇÃO: As definições de Secret foram removidas ---
-# --- As senhas estão agora diretamente nos Deployments ---
-
 # --- PersistentVolumeClaim para os dados do MariaDB ---
 apiVersion: v1
 kind: PersistentVolumeClaim
@@ -15,14 +12,15 @@ spec:
     requests:
       storage: 1Gi
 
+---
 # --- ConfigMap para o script de inicialização do MariaDB ---
-# Este será populado pelo comando 'kubectl create configmap'
-# a partir do arquivo ./bd/schema/init.sql do seu repositório
 apiVersion: v1
 kind: ConfigMap
 metadata:
   name: mariadb-init-scripts
+# O Jenkinsfile popula este ConfigMap com os dados do init.sql.
 
+---
 # --- MariaDB Deployment ---
 apiVersion: apps/v1
 kind: Deployment
@@ -47,25 +45,25 @@ spec:
             - containerPort: 3306
           env:
             - name: MARIADB_ROOT_PASSWORD
-              value: "rootpassword" # <<< SENHA HARCODED
+              value: "rootpassword"
             - name: MARIADB_DATABASE
               value: "watchup"
             - name: MARIADB_USER
               value: "watchuser"
             - name: MARIADB_PASSWORD
-              value: "watchpassword" # <<< SENHA HARCODED
+              value: "watchpassword"
           volumeMounts:
             - name: mariadb-persistent-storage
               mountPath: /var/lib/mysql
             - name: mariadb-initdb
-              mountPath: /docker-entrypoint-initdb.d # O MariaDB executa scripts daqui
+              mountPath: /docker-entrypoint-initdb.d
       volumes:
         - name: mariadb-persistent-storage
           persistentVolumeClaim:
             claimName: mariadb-data-pvc
         - name: mariadb-initdb
           configMap:
-            name: mariadb-init-scripts # Referencia o ConfigMap criado pelo Jenkins
+            name: mariadb-init-scripts
 
 ---
 # --- MariaDB Service (Apenas interno) ---
@@ -77,8 +75,8 @@ spec:
   selector:
     app: mariadb
   ports:
-    - port: 3306 # Porta que o serviço expõe
-      targetPort: 3306 # Porta do container MariaDB
+    - port: 3306
+      targetPort: 3306
   type: ClusterIP # Acessível apenas dentro do cluster
 
 ---
@@ -101,21 +99,22 @@ spec:
     spec:
       containers:
         - name: central-server
-          image: central-server:latest # Imagem construída localmente pelo Jenkins
-          imagePullPolicy: IfNotPresent # Usa a imagem local se existir, não tenta baixar do hub
+          image: central-server:latest
+          imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 5000
           env:
             - name: DB_HOST
-              value: "mariadb" # Conecta-se ao serviço MariaDB
+              value: "mariadb"
             - name: DB_NAME
               value: "watchup"
             - name: DB_USER
               value: "watchuser"
             - name: DB_PASSWORD
-              value: "watchpassword" # <<< SENHA HARCODED
+              value: "watchpassword"
 ---
 # --- Central Server Service (Externo) ---
+# Mantido como LoadBalancer para acesso direto à API, se necessário
 apiVersion: v1
 kind: Service
 metadata:
@@ -124,9 +123,9 @@ spec:
   selector:
     app: central-server
   ports:
-    - port: 5000 # Porta que o serviço expõe externamente
-      targetPort: 5000 # Porta do container central-server
-  type: LoadBalancer # Torna acessível externamente (MicroK8s usa NodePort ou MetalLB)
+    - port: 5000
+      targetPort: 5000
+  type: LoadBalancer
 
 ---
 # --- Monitoring Agent Deployment ---
@@ -137,7 +136,7 @@ metadata:
   labels:
     app: monitoring-agent
 spec:
-  replicas: 1 # Pode ser aumentado se necessário
+  replicas: 1
   selector:
     matchLabels:
       app: monitoring-agent
@@ -146,26 +145,26 @@ spec:
       labels:
         app: monitoring-agent
     spec:
-      dnsPolicy: "None" # Necessário para usar dnsConfig customizado
+      dnsPolicy: "None"
       dnsConfig:
         nameservers:
           - "8.8.8.8"
           - "1.1.1.1"
       securityContext:
-        sysctls: # Configurações de kernel para o pod
+        sysctls:
           - name: net.ipv4.ip_local_port_range
             value: "1024 65535"
       containers:
         - name: monitoring-agent
-          image: monitoring-agent:latest # Imagem construída localmente pelo Jenkins
+          image: monitoring-agent:latest
           imagePullPolicy: IfNotPresent
           env:
             - name: CENTRAL_SERVER_URL
-              value: "http://central-server:5000" # URL do serviço do Central Server
+              value: "http://central-server:5000"
             - name: AGENT_NAME
-              value: "agent-01" # Nome configurável para o agente
+              value: "agent-01"
             - name: CHECK_INTERVAL
-              value: "30" # Intervalo de verificação em segundos
+              value: "30"
 
 ---
 # --- Webapp Deployment ---
@@ -176,7 +175,8 @@ metadata:
   labels:
     app: webapp
 spec:
-  replicas: 1
+  # Para alta disponibilidade, você pode aumentar o número de réplicas
+  replicas: 3 # Exemplo com duas réplicas para HA
   selector:
     matchLabels:
       app: webapp
@@ -187,13 +187,13 @@ spec:
     spec:
       containers:
         - name: webapp
-          image: webapp:latest # Imagem construída localmente pelo Jenkins
+          image: webapp:latest
           imagePullPolicy: IfNotPresent
           ports:
-            - containerPort: 80 # Porta que o servidor web (Apache/Nginx) escuta dentro do container
+            - containerPort: 80
 
 ---
-# --- Webapp Service (Externo) ---
+# --- Webapp Service (MODIFICADO para ClusterIP) ---
 apiVersion: v1
 kind: Service
 metadata:
@@ -202,7 +202,28 @@ spec:
   selector:
     app: webapp
   ports:
-    - name: http # O nome da porta é opcional, mas bom para clareza
-      port: 80 # Porta externa que você usará para acessar a webapp
-      targetPort: 80 # Porta interna do container webapp (onde o Apache/Nginx está servindo)
-  type: LoadBalancer
+    - name: http
+      port: 80
+      targetPort: 80
+  type: ClusterIP # <<< ALTERADO: O serviço agora é apenas interno. O Ingress cuidará do acesso externo.
+
+---
+# --- Ingress para a Webapp (NOVO RECURSO) ---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: webapp-ingress
+  # Adicione anotações aqui se precisar de configurações específicas como reescrita de URL
+  # annotations:
+  #   nginx.ingress.kubernetes.io/rewrite-target: /
+spec:
+  rules:
+  - http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: webapp
+            port:
+              number: 80
