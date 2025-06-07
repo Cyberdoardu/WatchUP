@@ -76,6 +76,13 @@ pipeline {
                 echo ">>> Aplicando manifestos Kubernetes do arquivo ${env.K8S_DEPLOY_FILE}..."
                 sh "${env.MICROK8S_CMD} kubectl apply -f ${env.K8S_DEPLOY_FILE}"
 
+                // <<< INÍCIO DA CORREÇÃO >>>
+                echo ">>> Forçando a atualização dos pods para usar as novas imagens..."
+                sh "${env.MICROK8S_CMD} kubectl rollout restart deployment/webapp"
+                sh "${env.MICROK8S_CMD} kubectl rollout restart deployment/central-server"
+                sh "${env.MICROK8S_CMD} kubectl rollout restart deployment/monitoring-agent"
+                // <<< FIM DA CORREÇÃO >>>
+
                 echo ">>> Aguardando alguns segundos para os pods estabilizarem..."
                 sleep 30 
 
