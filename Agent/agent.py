@@ -65,58 +65,61 @@ def ping_check(target, timeout=5, count=4):
 def process_monitor(monitor):
     """Executa a verificação específica do monitor com logging detalhado"""
     result = {'success': 0, 'raw_result': None, 'response_time': 0}
+    start_time = time.time()
+    
     try:
         params = monitor['parameters']
         check_type = monitor['check_type']
-        start_time = time.time()
+        
+        # CORREÇÃO: Pega o endereço do alvo de forma flexível
+        target_address = params.get('target') or params.get('host')
+        if not target_address:
+            raise ValueError("Parâmetro 'target' ou 'host' não encontrado no monitor")
 
         print(f"\n=== PROCESSANDO {check_type.upper()} ===")
-        print(f"Alvo: {params['target']}")
+        print(f"Alvo: {target_address}") 
         
         if check_type == 'ping':
-            print(f"Parâmetros: count={params.get('count', 4)}, timeout={params.get('timeout', 2)}")
-            result.update(ping_check(
-                params['target'],
-                count=params.get('count', 4),
-                timeout=params.get('timeout', 2)
-            ))
+            ping_result = ping_check(
+                target_address, 
+                count=int(params.get('count', 4)),
+                timeout=int(params.get('timeout', 2))
+            )
+            result['success'] = ping_result['success']
+            result['raw_result'] = ping_result['output']
             
         elif check_type == 'http_status':
             expected_status = int(params.get('match', 200))
-            print(f"Esperado: HTTP {expected_status}, Timeout: {params.get('timeout', 5)}s")
-            response = requests.get(params['target'], timeout=params.get('timeout', 5))
+            response = requests.get(target_address, timeout=int(params.get('timeout', 5)))
             result['success'] = 1 if response.status_code == expected_status else 0
-            result['response_time'] = response.elapsed.total_seconds() * 1000  # ms
             if not result['success']:
                 result['raw_result'] = f"Status Recebido: {response.status_code}"
             
         elif check_type == 'api_response':
-            print(f"Match: {params.get('match', '')}")
-            print(f"Regex: {params.get('regex', '')}")
-            response = requests.get(params['target'], timeout=params.get('timeout', 5))
+            response = requests.get(target_address, timeout=int(params.get('timeout', 5)))
             content = response.text[:500] + '...' if len(response.text) > 500 else response.text
             
-            if 'regex' in params:
+            if 'regex' in params and params['regex']:
                 match = re.search(params['regex'], response.text)
                 result['success'] = 1 if match else 0
-                print(f"Regex match: {bool(match)}")
-            else:
+            elif 'match' in params and params['match']:
                 result['success'] = 1 if params.get('match') in response.text else 0
-                print(f"String match: {result['success']}")
+            else:
+                 raise ValueError("Parâmetro 'match' ou 'regex' obrigatório para api_response")
             
             if not result['success']:
                 result['raw_result'] = content
 
         print(f"Resultado: {'SUCESSO' if result['success'] else 'FALHA'}")
-        return result
 
     except Exception as e:
-        print(f"Erro durante execução: {str(e)}")
+        print(f"Erro durante execução do monitor: {str(e)}")
         result['raw_result'] = str(e)
-        return result
-    finally:
-        result['response_time'] = (time.time() - start_time) * 1000  # Tempo total
     
+    finally:
+        result['response_time'] = (time.time() - start_time) * 1000
+        return result
+            
 def hash_agent_name(agent_name, salt):
     combined = f"{agent_name}:{salt}"
     hashed = hashlib.sha256(combined.encode()).hexdigest()

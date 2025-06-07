@@ -347,32 +347,33 @@ def receive_metrics():
                 metric.get('raw_output', '')
             ))
         
-            
-        # Insert all metrics for this monitor_id
         cursor.executemany("""
             INSERT INTO raw_data 
             (monitor_id, agent_id, timestamp, response_time, success, raw_result)
             VALUES (%s, %s, %s, %s, %s, %s)
         """, values)
         
-        conn.commit()
-        return jsonify({'status': 'received', 'count': len(values)})
-        
+        # CORREÇÃO: Loop movido para ANTES do 'return'
         for metric in data['metrics']:
             monitor_id = metric['monitor_id']
             response_time = metric.get('response_time')
             success = metric['success']
             
+            # Esta função agora será chamada corretamente
             update_monitor_status(conn, cursor, monitor_id, response_time, success)
 
-    
+        conn.commit()
+        # O 'return' agora fica no final, após todo o processamento.
+        return jsonify({'status': 'received', 'count': len(values)})
+        
     except Error as e:
-        conn.rollback()
+        if conn:
+            conn.rollback()
         return jsonify({'error': str(e)}), 500
     except Exception as e:
         return jsonify({'error': str(e)}), 400
     finally:
-        if conn.is_connected():
+        if conn and conn.is_connected():
             cursor.close()
             conn.close()
 
