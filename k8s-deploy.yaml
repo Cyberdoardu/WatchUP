@@ -145,12 +145,6 @@ spec:
       labels:
         app: monitoring-agent
     spec:
-      # <<< CORRIGIDO: Seção de DNS customizado foi REMOVIDA para usar o DNS interno do k8s
-      # dnsPolicy: "None"
-      # dnsConfig:
-      #   nameservers:
-      #     - "8.8.8.8"
-      #     - "1.1.1.1"
       securityContext:
         sysctls:
           - name: net.ipv4.ip_local_port_range
