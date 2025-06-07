@@ -1,15 +1,18 @@
 <!DOCTYPE html>
 <html lang="pt-BR">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Criar Monitor</title>
     <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css">
+    <script src="https://cdn.tailwindcss.com"></script>
     <style>
         body {
             background-color: #f0f2f5;
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
         }
+
         .container {
             margin-top: 50px;
             padding: 30px;
@@ -17,31 +20,38 @@
             border-radius: 10px;
             box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
         }
+
         h2 {
             color: #333;
             text-align: center;
             margin-bottom: 30px;
         }
+
         .form-group label {
             font-weight: bold;
             color: #555;
         }
+
         .btn-primary {
             background-color: #007bff;
             border-color: #007bff;
         }
+
         .btn-primary:hover {
             background-color: #0056b3;
             border-color: #0056b3;
         }
+
         .btn-secondary {
             background-color: #6c757d;
             border-color: #6c757d;
         }
+
         .btn-secondary:hover {
             background-color: #545b62;
             border-color: #545b62;
         }
+
         .conditional-fields {
             display: none;
             margin-top: 15px;
@@ -52,89 +62,114 @@
         }
     </style>
 </head>
+
 <body>
-    <div class="container">
-        <h2>Criar Novo Monitor</h2>
-        <form id="createMonitorForm">
-            <div class="form-group">
-                <label for="monitorName">Nome do Monitor</label>
-                <input type="text" class="form-control" id="monitorName" name="monitorName" required>
-            </div>
-            <div class="form-row">
-                <div class="form-group col-md-6">
-                    <label for="requestInterval">Intervalo de Requisição (segundos)</label>
-                    <input type="number" class="form-control" id="requestInterval" name="requestInterval" min="1" required>
-                </div>
-                <div class="form-group col-md-6">
-                    <label for="retentionTime">Tempo de Retenção dos Dados (dias)</label>
-                    <input type="number" class="form-control" id="retentionTime" name="retentionTime" min="1" required>
-                </div>
-            </div>
-            <div class="form-group">
-                <label for="agentId">Agente</label>
-                <select class="form-control" id="agentId" name="agentId" required>
-                    <option value="">Carregando agentes...</option>
-                </select>
-            </div>
-            <div class="form-group">
-                <label for="verificationType">Tipo de Verificação</label>
-                <select class="form-control" id="verificationType" name="verificationType" required>
-                    <option value="">Selecione o Tipo</option>
-                    <option value="ping">Ping</option>
-                    <option value="http_status">Status HTTP</option>
-                    <option value="api">API</option>
-                </select>
-            </div>
+    <div class="max-w-6xl mx-auto px-4 py-8">
+        <div class="flex flex-wrap gap-4 border-b pb-4 mb-6">
+            <a href="menu.html" class="font-medium text-gray-500 hover:text-gray-700">Visão Geral</a>
+            <a href="incidentes.html" class="font-medium text-gray-500 hover:text-gray-700">Incidentes</a>
+            <a href="relatorios.html" class="font-medium text-gray-500 hover:text-gray-700">Relatórios de SLA</a>
+            <a href="#" class="font-medium text-gray-500 hover:text-gray-700">Anúncios</a>
+            <a href="#" class="font-medium text-gray-500 hover:text-gray-700">Eventos Agendados</a>
+            <a href="#" class="font-medium text-gray-500 hover:text-gray-700">Criar Monitor</a>
+            <a href="config-sistema.html" class="font-medium text-gray-500 hover:text-gray-700">Configurar Sistema</a>
+            <a href="#" class="font-medium text-gray-500 hover:text-gray-700 ml-auto">Assinar</a>
+        </div>
 
-            <div id="httpOptions" class="conditional-fields">
+        <div class="container">
+            <h2 class="text-2xl font-bold mb-4">Criar Novo Monitor</h2>
+            <form id="createMonitorForm">
                 <div class="form-group">
-                    <label for="targetUrl">URL Alvo</label>
-                    <input type="url" class="form-control" id="targetUrl" name="targetUrl" placeholder="https://exemplo.com">
+                    <label for="monitorName">Nome do Monitor</label>
+                    <input type="text" class="form-control" id="monitorName" name="monitorName" required>
                 </div>
-                 <div class="form-group">
-                    <label for="httpMatch">Código de Status HTTP Esperado (ex: 200, 201-299)</label>
-                    <input type="text" class="form-control" id="httpMatch" name="httpMatch" placeholder="200">
-                </div>
-            </div>
-
-            <div id="apiOptions" class="conditional-fields">
-                 <div class="form-group">
-                    <label for="apiUrl">URL do Endpoint da API</label>
-                    <input type="url" class="form-control" id="apiUrl" name="apiUrl" placeholder="https://api.exemplo.com/status">
+                <div class="form-row">
+                    <div class="form-group col-md-6">
+                        <label for="requestInterval">Intervalo de Requisição (segundos)</label>
+                        <input type="number" class="form-control" id="requestInterval" name="requestInterval" min="1"
+                            required>
+                    </div>
+                    <div class="form-group col-md-6">
+                        <label for="retentionTime">Tempo de Retenção dos Dados (dias)</label>
+                        <input type="number" class="form-control" id="retentionTime" name="retentionTime" min="1"
+                            required>
+                    </div>
                 </div>
                 <div class="form-group">
-                    <label for="apiMethod">Método HTTP</label>
-                    <select class="form-control" id="apiMethod" name="apiMethod">
-                        <option value="GET">GET</option>
-                        <option value="POST">POST</option>
-                        <option value="PUT">PUT</option>
-                        <option value="DELETE">DELETE</option>
+                    <label for="agentId">Agente</label>
+                    <select class="form-control" id="agentId" name="agentId" required>
+                        <option value="">Carregando agentes...</option>
                     </select>
                 </div>
                 <div class="form-group">
-                    <label for="apiHeaders">Cabeçalhos (formato JSON)</label>
-                    <textarea class="form-control" id="apiHeaders" name="apiHeaders" rows="3" placeholder='''{"Content-Type": "application/json", "Authorization": "Bearer seu_token"}'''></textarea>
+                    <label for="verificationType">Tipo de Verificação</label>
+                    <select class="form-control" id="verificationType" name="verificationType" required>
+                        <option value="">Selecione o Tipo</option>
+                        <option value="ping">Ping</option>
+                        <option value="http_status">Status HTTP</option>
+                        <option value="api">API</option>
+                    </select>
                 </div>
-                <div class="form-group">
-                    <label for="apiBody">Corpo da Requisição (formato JSON, para POST/PUT)</label>
-                    <textarea class="form-control" id="apiBody" name="apiBody" rows="3" placeholder='''{"chave": "valor"}'''></textarea>
-                </div>
-                <div class="form-group">
-                    <label for="apiMatch">Condição de Sucesso da Resposta (ex: JSON path `response.status == "success"` ou palavra-chave)</label>
-                    <input type="text" class="form-control" id="apiMatch" name="apiMatch" placeholder='''response.data.status == "UP"'''>
-                </div>
-            </div>
-             <div id="pingOptions" class="conditional-fields">
-                <div class="form-group">
-                    <label for="pingHost">Host ou Endereço IP</label>
-                    <input type="text" class="form-control" id="pingHost" name="pingHost" placeholder="google.com ou 8.8.8.8">
-                </div>
-            </div>
 
-            <button type="submit" class="btn btn-primary btn-block">Criar Monitor</button>
-            <button type="button" id="menuButton" class="btn btn-secondary btn-block mt-2">Voltar ao Menu</button>
-        </form>
+                <div id="httpOptions" class="conditional-fields">
+                    <div class="form-group">
+                        <label for="targetUrl">URL Alvo</label>
+                        <input type="url" class="form-control" id="targetUrl" name="targetUrl"
+                            placeholder="https://exemplo.com">
+                    </div>
+                    <div class="form-group">
+                        <label for="httpMatch">Código de Status HTTP Esperado (ex: 200, 201-299)</label>
+                        <input type="text" class="form-control" id="httpMatch" name="httpMatch" placeholder="200">
+                    </div>
+                </div>
+
+                <div id="apiOptions" class="conditional-fields">
+                    <div class="form-group">
+                        <label for="apiUrl">URL do Endpoint da API</label>
+                        <input type="url" class="form-control" id="apiUrl" name="apiUrl"
+                            placeholder="https://api.exemplo.com/status">
+                    </div>
+                    <div class="form-group">
+                        <label for="apiMethod">Método HTTP</label>
+                        <select class="form-control" id="apiMethod" name="apiMethod">
+                            <option value="GET">GET</option>
+                            <option value="POST">POST</option>
+                            <option value="PUT">PUT</option>
+                            <option value="DELETE">DELETE</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="apiHeaders">Cabeçalhos (formato JSON)</label>
+                        <textarea class="form-control" id="apiHeaders" name="apiHeaders" rows="3"
+                            placeholder='''{"Content-Type": "application/json", "Authorization": "Bearer seu_token"}'''></textarea>
+                    </div>
+                    <div class="form-group">
+                        <label for="apiBody">Corpo da Requisição (formato JSON, para POST/PUT)</label>
+                        <textarea class="form-control" id="apiBody" name="apiBody" rows="3"
+                            placeholder='''{"chave": "valor"}'''></textarea>
+                    </div>
+                    <div class="form-group">
+                        <label for="apiMatch">Condição de Sucesso da Resposta (ex: JSON path `response.status ==
+                            "success"`
+                            ou palavra-chave)</label>
+                        <input type="text" class="form-control" id="apiMatch" name="apiMatch"
+                            placeholder='''response.data.status == "UP"'''>
+                    </div>
+                </div>
+                <div id="pingOptions" class="conditional-fields">
+                    <div class="form-group">
+                        <label for="pingHost">Host ou Endereço IP</label>
+                        <input type="text" class="form-control" id="pingHost" name="pingHost"
+                            placeholder="google.com ou 8.8.8.8">
+                    </div>
+                </div>
+
+                <button type="submit" class="btn btn-primary btn-block">Criar Monitor</button>
+                <button type="button" id="menuButton" class="btn btn-secondary btn-block mt-2">Voltar ao Menu</button>
+            </form>
+        </div>
     </div>
     <script src="js/criar-monitor.js"></script>
 </body>
+
 </html>

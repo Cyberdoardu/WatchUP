@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="pt-BR">
+
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -7,14 +8,18 @@
   <script src="js/incidentes.js" defer></script>
   <script src="https://cdn.tailwindcss.com"></script>
 </head>
+
 <body class="bg-gray-50">
   <div class="max-w-6xl mx-auto px-4 py-8">
     <!-- Navegação -->
     <div class="flex flex-wrap gap-4 border-b pb-4 mb-6">
-      <a href="#" class="font-medium text-gray-500 hover:text-gray-700">Visão Geral</a>
+      <a href="menu.html" class="font-medium text-gray-500 hover:text-gray-700">Visão Geral</a>
       <a href="#" class="font-medium text-blue-600">Incidentes</a>
+      <a href="relatorios.html" class="font-medium text-gray-500 hover:text-gray-700">Relatórios de SLA</a>
       <a href="#" class="font-medium text-gray-500 hover:text-gray-700">Anúncios</a>
       <a href="#" class="font-medium text-gray-500 hover:text-gray-700">Eventos Agendados</a>
+      <a href="criar-monitor.html" class="font-medium text-gray-500 hover:text-gray-700">Criar Monitor</a>
+      <a href="config-sistema.html" class="font-medium text-gray-500 hover:text-gray-700">Configurar Sistema</a>
       <a href="#" class="font-medium text-gray-500 hover:text-gray-700 ml-auto">Assinar</a>
     </div>
 
@@ -28,11 +33,13 @@
     <!-- Modal -->
     <div id="incidentModal" class="fixed inset-0 bg-black bg-opacity-50 z-50 hidden flex items-center justify-center">
       <div class="bg-white rounded-lg shadow-lg w-full max-w-2xl mx-4 p-6 relative">
-        <button id="closeModalBtn" class="absolute top-2 right-2 text-gray-500 hover:text-gray-800 text-2xl">&times;</button>
+        <button id="closeModalBtn"
+          class="absolute top-2 right-2 text-gray-500 hover:text-gray-800 text-2xl">&times;</button>
         <h2 class="text-xl font-medium text-gray-800 mb-4">Novo Incidente</h2>
 
         <form id="incidentForm" class="space-y-5">
-          <input type="text" id="titulo" required placeholder="Título do incidente" class="w-full p-2 border border-gray-300 rounded" />
+          <input type="text" id="titulo" required placeholder="Título do incidente"
+            class="w-full p-2 border border-gray-300 rounded" />
 
           <div>
             <label class="block text-sm font-medium text-gray-700 mb-1">Impacto</label>
@@ -70,7 +77,8 @@
 
           <div>
             <label class="block text-sm font-medium text-gray-700 mb-1">Descrição (Markdown)</label>
-            <textarea id="descricao" rows="5" required class="w-full p-2 border border-gray-300 rounded" placeholder="Escreva os detalhes..."></textarea>
+            <textarea id="descricao" rows="5" required class="w-full p-2 border border-gray-300 rounded"
+              placeholder="Escreva os detalhes..."></textarea>
           </div>
 
           <div class="flex justify-end">
@@ -87,4 +95,5 @@
     <ul id="incidentList" class="space-y-4"></ul>
   </div>
 </body>
+
 </html>
