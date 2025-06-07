@@ -105,7 +105,7 @@ spec:
             - containerPort: 5000
           env:
             - name: DB_HOST
-              value: "mariadb.default.svc.cluster.local"
+              value: "mariadb" # <<< CORRIGIDO: Voltando ao nome simples do serviço
             - name: DB_NAME
               value: "watchup"
             - name: DB_USER
@@ -145,11 +145,12 @@ spec:
       labels:
         app: monitoring-agent
     spec:
-      dnsPolicy: "None"
-      dnsConfig:
-        nameservers:
-          - "8.8.8.8"
-          - "1.1.1.1"
+      # <<< CORRIGIDO: Seção de DNS customizado foi REMOVIDA para usar o DNS interno do k8s
+      # dnsPolicy: "None"
+      # dnsConfig:
+      #   nameservers:
+      #     - "8.8.8.8"
+      #     - "1.1.1.1"
       securityContext:
         sysctls:
           - name: net.ipv4.ip_local_port_range
@@ -160,7 +161,7 @@ spec:
           imagePullPolicy: IfNotPresent
           env:
             - name: CENTRAL_SERVER_URL
-              value: "http://central-server.default.svc.cluster.local:5000"
+              value: "http://central-server:5000" # <<< CORRIGIDO: Voltando ao nome simples do serviço
             - name: AGENT_NAME
               value: "agent-01"
             - name: CHECK_INTERVAL
@@ -175,8 +176,7 @@ metadata:
   labels:
     app: webapp
 spec:
-  # Para alta disponibilidade, você pode aumentar o número de réplicas
-  replicas: 3 # Exemplo com duas réplicas para HA
+  replicas: 2
   selector:
     matchLabels:
       app: webapp
@@ -205,7 +205,7 @@ spec:
     - name: http
       port: 80
       targetPort: 80
-  type: ClusterIP # <<< ALTERADO: O serviço agora é apenas interno. O Ingress cuidará do acesso externo.
+  type: ClusterIP
 
 ---
 # --- Ingress para a Webapp (NOVO RECURSO) ---
@@ -213,9 +213,6 @@ apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
   name: webapp-ingress
-  # Adicione anotações aqui se precisar de configurações específicas como reescrita de URL
-  # annotations:
-  #   nginx.ingress.kubernetes.io/rewrite-target: /
 spec:
   rules:
   - http:
