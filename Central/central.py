@@ -283,7 +283,13 @@ def update_monitor_status(conn, cursor, monitor_id, response_time, success):
             app.logger.error(f"Monitor config not found for ID: {monitor_id}")
             return
 
-        failure_threshold_downtime, failure_threshold_partial_degradation, response_time_threshold_degraded, response_time_threshold_critical = monitor_config
+        # Garante que valores nulos do banco se tornem 0 para comparação
+        (
+            failure_threshold_downtime,
+            failure_threshold_partial_degradation,
+            response_time_threshold_degraded,
+            response_time_threshold_critical,
+        ) = (val or 0 for val in monitor_config)
         
         current_status = "operational"
         
@@ -294,16 +300,28 @@ def update_monitor_status(conn, cursor, monitor_id, response_time, success):
                 current_status = "degraded"
 
         if success == 0:
-            cursor.execute("""
+            # CORRIGIDO: A lógica para contar falhas consecutivas foi reescrita.
+            # Esta query busca o status das últimas N checagens (N = limite de downtime).
+            # Assim, evitamos buscar todo o histórico a cada falha.
+            query = """
+                SELECT success FROM (
                     SELECT success FROM raw_data
                     WHERE monitor_id = %s
                     ORDER BY timestamp DESC
-                """, (monitor_id,))
-
-            all_results = cursor.fetchall()
+                    LIMIT %s
+                ) as recent_checks;
+            """
+            cursor.execute(query, (monitor_id, failure_threshold_downtime))
+            
+            recent_checks = cursor.fetchall()
             consecutive_failures = 0
-            for result in all_results:
-                consecutive_failures = cursor.fetchone()[0]
+            # Itera sobre os resultados buscados para contar as falhas.
+            for check in recent_checks:
+                if check[0] == 0: # check[0] é o campo 'success'
+                    consecutive_failures += 1
+                else:
+                    # Se encontrarmos um sucesso, a sequência de falhas é quebrada.
+                    break
             
             if consecutive_failures >= failure_threshold_downtime:
                 current_status = "downtime"
@@ -314,14 +332,11 @@ def update_monitor_status(conn, cursor, monitor_id, response_time, success):
             UPDATE monitors SET current_status = %s WHERE id = %s
         """, (current_status, monitor_id))
         
-        conn.commit()
 
     except Error as e:
         app.logger.error(f"Error updating monitor status: {e}")
-
-
-
-
+        # Lançar a exceção permite que a transação seja revertida na função que a chamou.
+        raise
 
 
 
@@ -344,7 +359,7 @@ def receive_metrics():
                 datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f'),
                 metric.get('response_time'),
                 metric['success'],
-                metric.get('raw_output', '')
+                metric.get('raw_result', '')
             ))
         
         cursor.executemany("""

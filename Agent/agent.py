@@ -2,7 +2,7 @@ import os
 import time
 import subprocess
 import requests
-import re  # Adicionando o import do módulo re
+import re
 import hashlib
 from threading import Thread
 from flask import Flask, request, jsonify
@@ -71,10 +71,11 @@ def process_monitor(monitor):
         params = monitor['parameters']
         check_type = monitor['check_type']
         
-        # CORREÇÃO: Pega o endereço do alvo de forma flexível
-        target_address = params.get('target') or params.get('host')
+        # CORRIGIDO: Adicionado 'params.get('url')' para compatibilidade com monitores antigos.
+        target_address = params.get('target') or params.get('host') or params.get('url')
         if not target_address:
-            raise ValueError("Parâmetro 'target' ou 'host' não encontrado no monitor")
+            # CORRIGIDO: Mensagem de erro atualizada para incluir 'url'.
+            raise ValueError("Parâmetro 'target', 'host' ou 'url' não encontrado no monitor")
 
         print(f"\n=== PROCESSANDO {check_type.upper()} ===")
         print(f"Alvo: {target_address}") 
@@ -92,8 +93,7 @@ def process_monitor(monitor):
             expected_status = int(params.get('match', 200))
             response = requests.get(target_address, timeout=int(params.get('timeout', 5)))
             result['success'] = 1 if response.status_code == expected_status else 0
-            if not result['success']:
-                result['raw_result'] = f"Status Recebido: {response.status_code}"
+            result['raw_result'] = f"Status Recebido: {response.status_code}"
             
         elif check_type == 'api_response':
             response = requests.get(target_address, timeout=int(params.get('timeout', 5)))
@@ -107,8 +107,8 @@ def process_monitor(monitor):
             else:
                  raise ValueError("Parâmetro 'match' ou 'regex' obrigatório para api_response")
             
-            if not result['success']:
-                result['raw_result'] = content
+            #if not result['success']: Comentei para salvar sempre
+            result['raw_result'] = content
 
         print(f"Resultado: {'SUCESSO' if result['success'] else 'FALHA'}")
 
@@ -182,7 +182,7 @@ def update_targets():
                 print(f"Targets recebidos ({len(targets)}):")
                 for t in targets:
                     print(f" - {t['monitor_name']} ({t['check_type']})")
-                    print(f"   Parâmetros: {t['parameters']}")  # Debug detalhado
+                    print(f"   Parâmetros: {t['parameters']}")
             else:
                 print(f"Erro HTTP: {response.status_code}")
                 print(f"Resposta: {response.text}")
@@ -226,7 +226,7 @@ def monitoring_loop():
                     last_time = last_check.get(monitor_id, 0)
                     
                     if (time.time() - last_time) < check_interval:
-                        print(f"Monitor {monitor_id} aguardando próximo ciclo ({check_interval}s)")
+                        print(f"Monitor {monitor['monitor_name']} ({monitor_id}) aguardando próximo ciclo ({check_interval}s)")
                         continue
                         
                     print(f"\n=== INICIANDO VERIFICAÇÃO [{monitor['monitor_name']}] ===")

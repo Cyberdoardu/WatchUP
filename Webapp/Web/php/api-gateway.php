@@ -55,7 +55,7 @@ class ReportHandler {
             SELECT 
                 rd.timestamp, 
                 rd.success,
-                JSON_UNQUOTE(JSON_EXTRACT(m.parameters, '$.request_interval')) AS request_interval
+                COALESCE(JSON_UNQUOTE(JSON_EXTRACT(m.parameters, '$.check_time')), 60) AS request_interval
             FROM raw_data AS rd
             JOIN monitors AS m ON rd.monitor_id = m.id
             WHERE rd.monitor_id = ? 

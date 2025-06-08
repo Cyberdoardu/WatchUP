@@ -66,7 +66,7 @@ document.addEventListener('DOMContentLoaded', function () {
         const selectedType = this.value;
         if (selectedType === 'http_status') {
             httpOptions.style.display = 'block';
-        } else if (selectedType === 'api') {
+        } else if (selectedType === 'api_response') {
             apiOptions.style.display = 'block';
         } else if (selectedType === 'ping') {
             pingOptions.style.display = 'block';
@@ -80,11 +80,14 @@ document.addEventListener('DOMContentLoaded', function () {
         let parameters = {};
         const checkType = formData.get('verificationType');
 
+        // ADICIONADO: O intervalo de checagem agora faz parte dos parâmetros.
+        parameters.check_time = parseInt(formData.get('requestInterval'), 10);
+
         if (checkType === 'http_status') {
-            parameters.url = formData.get('targetUrl');
+            parameters.target = formData.get('targetUrl'); // CORRIGIDO: Padronizado para 'target'
             parameters.match = formData.get('httpMatch') || '200'; 
-        } else if (checkType === 'api') {
-            parameters.url = formData.get('apiUrl');
+        } else if (checkType === 'api_response') { // CORRIGIDO de 'api' para 'api_response'
+            parameters.target = formData.get('apiUrl'); // CORRIGIDO: Padronizado para 'target'
             parameters.method = formData.get('apiMethod');
             parameters.match = formData.get('apiMatch');
             try {
@@ -100,17 +103,15 @@ document.addEventListener('DOMContentLoaded', function () {
                 return;
             }
         } else if (checkType === 'ping') {
-            parameters.host = formData.get('pingHost');
+            parameters.target = formData.get('pingHost'); // CORRIGIDO: Padronizado para 'target'
         }
 
         const monitorData = {
             monitor_name: formData.get('monitorName'),
-            request_interval: parseInt(formData.get('requestInterval')),
-            retention_days: parseInt(formData.get('retentionTime')), // Ajustado para retention_days
-            agent: formData.get('agentId'),           // Ajustado para agent (usa agent_id do select)
-            check_type: checkType,                    // Ajustado para check_type
-            parameters: parameters,                   // Ajustado para parameters (era config)
-            // is_primary é opcional, o Python já tem um default data.get('is_primary', True)
+            retention_days: parseInt(formData.get('retentionTime')),
+            agent: formData.get('agentId'),
+            check_type: checkType,
+            parameters: parameters, // O objeto de parâmetros agora está correto
         };
 
         console.log("Dados enviados para criar monitor:", JSON.stringify(monitorData));

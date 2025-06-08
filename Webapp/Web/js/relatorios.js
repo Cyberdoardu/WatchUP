@@ -16,6 +16,7 @@ document.addEventListener('DOMContentLoaded', () => {
     };
 
     const formatSecondsToMinutes = (totalSeconds) => {
+        if (isNaN(totalSeconds) || totalSeconds < 0) return '0s';
         if (totalSeconds < 60) return `${totalSeconds}s`;
         const minutes = Math.floor(totalSeconds / 60);
         const seconds = totalSeconds % 60;
@@ -76,43 +77,69 @@ document.addEventListener('DOMContentLoaded', () => {
             
             if (!response.ok) {
                  const errorData = await response.json();
-                 throw new Error(errorData.error || 'Erro de rede ao buscar dados do relatório.');
+                 throw new Error(errorData.message || 'Erro de rede ao buscar dados do relatório.');
             }
 
             const reportData = await response.json();
 
+            // --- LÓGICA DE AGRUPAMENTO DE INCIDENTES CORRIGIDA ---
             let totalDowntimeSeconds = 0;
             const incidents = [];
-            
-            reportData.forEach(entry => {
-                if (entry.success == 0) {
-                    const downtime = parseInt(entry.request_interval, 10);
-                    totalDowntimeSeconds += downtime;
-                    incidents.push({
-                        dateTime: entry.timestamp,
-                        duration: downtime,
-                        status: { text: 'Falha na Verificação', class: 'bg-red-100 text-red-800' }
-                    });
+            let currentIncident = null;
+
+            // Garante que os dados estão ordenados por tempo
+            reportData.sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
+
+            for (const entry of reportData) {
+                const isFailure = entry.success == 0;
+                const interval = parseInt(entry.request_interval, 10) || 0;
+
+                if (isFailure) {
+                    totalDowntimeSeconds += interval;
+                    if (currentIncident) {
+                        // Falha consecutiva: estende o incidente atual
+                        currentIncident.duration += interval;
+                        currentIncident.end_time = entry.timestamp;
+                    } else {
+                        // Nova falha: inicia um novo incidente
+                        currentIncident = {
+                            start_time: entry.timestamp,
+                            end_time: entry.timestamp,
+                            duration: interval,
+                            status: { text: 'Falha na Verificação', class: 'bg-red-100 text-red-800' }
+                        };
+                    }
+                } else {
+                    // Sucesso: se havia um incidente, ele terminou
+                    if (currentIncident) {
+                        incidents.push(currentIncident);
+                        currentIncident = null;
+                    }
                 }
-            });
+            }
+
+            // Se o relatório terminar durante uma falha, adiciona o último incidente à lista
+            if (currentIncident) {
+                incidents.push(currentIncident);
+            }
 
             const totalChecks = reportData.length;
-            const failedChecks = incidents.length;
+            const failedChecks = reportData.filter(entry => entry.success == 0).length;
             const uptimePercentage = totalChecks > 0 ? (((totalChecks - failedChecks) / totalChecks) * 100).toFixed(4) : "100.0000";
 
             document.getElementById('reportCompanyName').textContent = companyName;
-            document.getElementById('reportDateRange').textContent = `Período: ${new Date(startDateStr+'T00:00:00').toLocaleDateString('pt-BR')} - ${new Date(endDateStr+'T00:00:00').toLocaleDateString('pt-BR')}`;
+            document.getElementById('reportDateRange').textContent = `Período: ${new Date(startDateStr + 'T00:00:00').toLocaleDateString('pt-BR')} - ${new Date(endDateStr + 'T00:00:00').toLocaleDateString('pt-BR')}`;
             document.getElementById('reportUptime').textContent = `${uptimePercentage}%`;
-            document.getElementById('reportIncidents').textContent = failedChecks;
+            document.getElementById('reportIncidents').textContent = incidents.length; // Contagem de incidentes correta
             document.getElementById('reportDowntime').textContent = formatSecondsToMinutes(totalDowntimeSeconds);
 
             const tbody = document.getElementById('reportIncidentTbody');
             tbody.innerHTML = '';
-            if(incidents.length > 0){
+            if (incidents.length > 0) {
                 incidents.forEach(incident => {
                     const row = `
                         <tr>
-                            <td class="p-3 text-sm text-gray-700 border">${formatDateTime(incident.dateTime)}</td>
+                            <td class="p-3 text-sm text-gray-700 border">${formatDateTime(incident.start_time)}</td>
                             <td class="p-3 text-sm text-gray-700 border">${formatSecondsToMinutes(incident.duration)}</td>
                             <td class="p-3 text-sm text-gray-700 border">
                                 <span class="px-2 py-1 rounded ${incident.status.class}">${incident.status.text}</span>
@@ -122,7 +149,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     tbody.innerHTML += row;
                 });
             } else {
-                 tbody.innerHTML = '<tr><td colspan="3" class="p-3 text-center text-gray-500 border">Nenhum incidente registrado neste período.</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="3" class="p-3 text-center text-gray-500 border">Nenhum incidente registrado neste período.</td></tr>';
             }
 
             document.getElementById('reportFooter').textContent = `Relatório gerado para o monitor "${monitorName}" | © ${new Date().getFullYear()} ${companyName}.`;
