@@ -1,26 +1,11 @@
 document.addEventListener('DOMContentLoaded', () => {
-    // <-- CORREÇÃO AQUI: O ID do botão foi ajustado para 'gerarPDFbtn', como está no seu HTML.
     const gerarPDFbtn = document.getElementById('gerarPDFbtn');
     const relatorioContainer = document.getElementById('report-container');
+    const monitorSelect = document.getElementById('monitorSelect');
 
-    // --- FUNÇÕES AUXILIARES ---
-
-    /**
-     * Gera um número inteiro aleatório entre min e max (inclusivo).
-     * @param {number} min - O valor mínimo.
-     * @param {number} max - O valor máximo.
-     * @returns {number} - O número inteiro aleatório.
-     */
-    const getRandomInt = (min, max) => {
-        return Math.floor(Math.random() * (max - min + 1)) + min;
-    };
-
-    /**
-     * Formata um objeto Date para uma string "dd/mm/aaaa HH:MM".
-     * @param {Date} date - O objeto Date a ser formatado.
-     * @returns {string} - A data formatada.
-     */
-    const formatDateTime = (date) => {
+    // --- FUNÇÕES DE FORMATAÇÃO ---
+    const formatDateTime = (dateString) => {
+        const date = new Date(dateString);
         const pad = (num) => num.toString().padStart(2, '0');
         const day = pad(date.getDate());
         const month = pad(date.getMonth() + 1);
@@ -30,124 +15,138 @@ document.addEventListener('DOMContentLoaded', () => {
         return `${day}/${month}/${year} ${hours}:${minutes}`;
     };
 
-    /**
-      * Formata uma string de data (YYYY-MM-DD) para um objeto Date, 
-      * garantindo que a data seja interpretada corretamente para evitar problemas de fuso horário.
-      * @param {string} dateString - A data no formato 'YYYY-MM-DD'.
-      * @returns {Date}
-      */
-    const parseDateString = (dateString) => {
-        return new Date(dateString + 'T00:00:00');
-    }
-
-    /**
-     * Formata segundos para uma string "Xm Ys".
-     * @param {number} totalSeconds - O total de segundos.
-     * @returns {string} - A string formatada.
-     */
     const formatSecondsToMinutes = (totalSeconds) => {
+        if (totalSeconds < 60) return `${totalSeconds}s`;
         const minutes = Math.floor(totalSeconds / 60);
         const seconds = totalSeconds % 60;
         return `${minutes}m ${seconds}s`;
     };
 
-    // --- LÓGICA PRINCIPAL ---
+    // --- CARREGA OS MONITORES DA API ---
+    async function loadMonitors() {
+        try {
+            const response = await fetch('php/api-gateway.php?endpoint=monitors');
+            if (!response.ok) {
+                throw new Error('Erro de rede ao buscar monitores.');
+            }
+            const monitors = await response.json();
 
-    // Adiciona uma verificação para garantir que o botão foi encontrado antes de adicionar o listener
-    if (gerarPDFbtn) {
-        gerarPDFbtn.addEventListener('click', () => {
-            // 1. Coletar dados do formulário
-            const companyName = document.getElementById('companyName').value.trim();
-            const serviceName = document.getElementById('servico').value;
-            const startDateStr = document.getElementById('startDate').value;
-            const endDateStr = document.getElementById('endDate').value;
+            monitorSelect.innerHTML = '<option value="">Selecione um Monitor</option>'; 
+            
+            monitors.forEach(monitor => {
+                const option = document.createElement('option');
+                option.value = monitor.id;
+                option.textContent = monitor.monitor_name;
+                option.dataset.monitorName = monitor.monitor_name; 
+                monitorSelect.appendChild(option);
+            });
 
-            // Validação simples
-            if (!companyName || !startDateStr || !endDateStr) {
-                alert("Por favor, preencha o nome da empresa e as datas de início e fim.");
-                return;
+        } catch (error) {
+            monitorSelect.innerHTML = '<option value="">Erro ao carregar monitores</option>';
+            console.error("Falha ao carregar monitores:", error);
+        }
+    }
+
+    // --- LÓGICA PRINCIPAL PARA GERAR O RELATÓRIO ---
+    gerarPDFbtn.addEventListener('click', async () => {
+        const companyName = document.getElementById('companyName').value.trim();
+        const monitorId = monitorSelect.value;
+        const startDateStr = document.getElementById('startDate').value;
+        const endDateStr = document.getElementById('endDate').value;
+        
+        const selectedOption = monitorSelect.options[monitorSelect.selectedIndex];
+        const monitorName = selectedOption.dataset.monitorName || 'N/A';
+
+        if (!companyName || !monitorId || !startDateStr || !endDateStr) {
+            alert("Por favor, preencha todos os campos: Nome da Empresa, Monitor, Data de Início e Fim.");
+            return;
+        }
+        
+        gerarPDFbtn.textContent = 'Gerando...';
+        gerarPDFbtn.disabled = true;
+
+        try {
+            const params = new URLSearchParams({
+                monitor_id: monitorId,
+                start_date: startDateStr,
+                end_date: endDateStr
+            });
+
+            const response = await fetch(`php/api-gateway.php?endpoint=report_data&${params}`);
+            
+            if (!response.ok) {
+                 const errorData = await response.json();
+                 throw new Error(errorData.error || 'Erro de rede ao buscar dados do relatório.');
             }
 
-            const startDate = parseDateString(startDateStr);
-            const endDate = parseDateString(endDateStr);
+            const reportData = await response.json();
 
-            // 2. Gerar dados aleatórios para o relatório
-            const totalIncidents = getRandomInt(1, 8);
             let totalDowntimeSeconds = 0;
-            const incidentsData = [];
+            const incidents = [];
+            
+            reportData.forEach(entry => {
+                if (entry.success == 0) {
+                    const downtime = parseInt(entry.request_interval, 10);
+                    totalDowntimeSeconds += downtime;
+                    incidents.push({
+                        dateTime: entry.timestamp,
+                        duration: downtime,
+                        status: { text: 'Falha na Verificação', class: 'bg-red-100 text-red-800' }
+                    });
+                }
+            });
 
-            const timeDifference = endDate.getTime() - startDate.getTime();
-            // Evitar divisão por zero se houver 0 incidentes
-            const interval = totalIncidents > 0 ? timeDifference / (totalIncidents + 1) : 0;
+            const totalChecks = reportData.length;
+            const failedChecks = incidents.length;
+            const uptimePercentage = totalChecks > 0 ? (((totalChecks - failedChecks) / totalChecks) * 100).toFixed(4) : "100.0000";
 
-            const statuses = [
-                { text: 'Interrupção Parcial', class: 'bg-red-100 text-red-800' },
-                { text: 'Desempenho Degradado', class: 'bg-yellow-100 text-yellow-800' },
-                { text: 'Interrupção Total', class: 'bg-red-200 text-red-900 font-bold' }
-            ];
-
-            for (let i = 0; i < totalIncidents; i++) {
-                const incidentDuration = getRandomInt(60, 900);
-                totalDowntimeSeconds += incidentDuration;
-
-                const incidentTimestamp = startDate.getTime() + (interval * (i + 1));
-                const incidentDate = new Date(incidentTimestamp);
-
-                incidentsData.push({
-                    dateTime: incidentDate,
-                    service: serviceName === 'Todos os Serviços' ? ['API Principal', 'Website', 'Banco de Dados'][getRandomInt(0, 2)] : serviceName,
-                    status: statuses[getRandomInt(0, statuses.length - 1)],
-                    duration: formatSecondsToMinutes(incidentDuration)
-                });
-            }
-
-            const totalPeriodSeconds = timeDifference / 1000;
-            const uptime = totalPeriodSeconds > 0 ? (100 - (totalDowntimeSeconds / totalPeriodSeconds) * 100).toFixed(4) : "100.0000";
-
-            // 3. Popular o HTML do relatório com os dados gerados
             document.getElementById('reportCompanyName').textContent = companyName;
-
-            // <-- CORREÇÃO ADICIONAL: corrigido um pequeno erro de digitação em 'toLocaleDateString'
-            document.getElementById('reportDateRange').textContent = `Período: ${startDate.toLocaleDateString('pt-BR')} - ${endDate.toLocaleDateString('pt-BR')}`;
-
-            document.getElementById('reportUptime').textContent = `${uptime}%`;
-            document.getElementById('reportIncidents').textContent = totalIncidents;
+            document.getElementById('reportDateRange').textContent = `Período: ${new Date(startDateStr+'T00:00:00').toLocaleDateString('pt-BR')} - ${new Date(endDateStr+'T00:00:00').toLocaleDateString('pt-BR')}`;
+            document.getElementById('reportUptime').textContent = `${uptimePercentage}%`;
+            document.getElementById('reportIncidents').textContent = failedChecks;
             document.getElementById('reportDowntime').textContent = formatSecondsToMinutes(totalDowntimeSeconds);
 
             const tbody = document.getElementById('reportIncidentTbody');
             tbody.innerHTML = '';
-            incidentsData.sort((a, b) => a.dateTime - b.dateTime).forEach(incident => {
-                const row = `
-                    <tr>
-                        <td class="p-3 text-sm text-gray-700 border">${formatDateTime(incident.dateTime)}</td>
-                        <td class="p-3 text-sm text-gray-700 border">${incident.service}</td>
-                        <td class="p-3 text-sm text-gray-700 border">
-                            <span class="px-2 py-1 rounded ${incident.status.class}">${incident.status.text}</span>
-                        </td>
-                        <td class="p-3 text-sm text-gray-700 border">${incident.duration}</td>
-                    </tr>
-                `;
-                tbody.innerHTML += row;
-            });
+            if(incidents.length > 0){
+                incidents.forEach(incident => {
+                    const row = `
+                        <tr>
+                            <td class="p-3 text-sm text-gray-700 border">${formatDateTime(incident.dateTime)}</td>
+                            <td class="p-3 text-sm text-gray-700 border">${formatSecondsToMinutes(incident.duration)}</td>
+                            <td class="p-3 text-sm text-gray-700 border">
+                                <span class="px-2 py-1 rounded ${incident.status.class}">${incident.status.text}</span>
+                            </td>
+                        </tr>
+                    `;
+                    tbody.innerHTML += row;
+                });
+            } else {
+                 tbody.innerHTML = '<tr><td colspan="3" class="p-3 text-center text-gray-500 border">Nenhum incidente registrado neste período.</td></tr>';
+            }
 
-            document.getElementById('reportFooter').textContent = `Relatório gerado automaticamente - WatchUp | © ${new Date().getFullYear()} ${companyName}. Todos os direitos reservados.`;
+            document.getElementById('reportFooter').textContent = `Relatório gerado para o monitor "${monitorName}" | © ${new Date().getFullYear()} ${companyName}.`;
 
-            // 4. Exibir o container do relatório
             relatorioContainer.classList.remove('hidden');
 
-            // 5. Gerar o PDF a partir do conteúdo populado
             const reportElement = document.getElementById('report-preview');
             const options = {
                 margin: [0.5, 0.5, 0.5, 0.5],
-                filename: `relatorio_sla_${companyName.toLowerCase().replace(/\s/g, '_')}.pdf`,
+                filename: `relatorio_sla_${monitorName.toLowerCase().replace(/\s/g, '_')}.pdf`,
                 image: { type: 'jpeg', quality: 0.98 },
                 html2canvas: { scale: 2, useCORS: true },
                 jsPDF: { unit: 'in', format: 'a4', orientation: 'portrait' }
             };
-
             html2pdf().from(reportElement).set(options).save();
-        });
-    } else {
-        console.error("O botão com o ID 'gerarPDFbtn' não foi encontrado. Verifique o ID no arquivo HTML.");
-    }
+
+        } catch (error) {
+            alert(`Erro ao gerar relatório: ${error.message}`);
+            console.error("Falha na geração do relatório:", error);
+        } finally {
+            gerarPDFbtn.textContent = 'Gerar e Baixar PDF';
+            gerarPDFbtn.disabled = false;
+        }
+    });
+
+    loadMonitors();
 });

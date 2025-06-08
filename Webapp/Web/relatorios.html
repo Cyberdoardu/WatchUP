@@ -9,11 +9,13 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"
         integrity="sha512-GsLlZN/3F2ErC5ifS5QtgpiJtWd43JWSuIgh7mbzZ8zBps+dvLusV+eNQATqgA/HdeKFVgA5v3S/cIrLF7QnIg=="
         crossorigin="anonymous" referrerpolicy="no-referrer" defer></script>
+    <!-- O nome do script continua o mesmo -->
     <script src="js/relatorios.js" defer></script>
 </head>
 
 <body class="bg-gray-50">
     <div class="max-w-6xl mx-auto px-4 py-8">
+        <!-- Barra de navegação (sem alteração) -->
         <div class="flex flex-wrap gap-4 border-b pb-4 mb-6">
             <a href="menu.html" class="font-medium text-gray-500 hover:text-gray-700">Visão Geral</a>
             <a href="incidentes.html" class="font-medium text-gray-500 hover:text-gray-700">Incidentes</a>
@@ -36,15 +38,16 @@
                     <input type="text" id="companyName" class="w-full p-2 border border-gray-300 rounded"
                         placeholder="Sua Empresa LTDA">
                 </div>
+                
+                <!-- ===== ALTERAÇÃO AQUI ===== -->
                 <div>
-                    <label for="servico" class="block text-sm font-medium text-gray-700 mb-1">Serviço</label>
-                    <select id="servico" class="w-full p-2 border border-gray-300 rounded">
-                        <option value="API Principal">API Principal</option>
-                        <option value="Website Institucional">Website Institucional</option>
-                        <option value="Banco de Dados">Banco de Dados</option>
-                        <option value="Todos os Serviços">Todos os Serviços</option>
+                    <label for="monitorSelect" class="block text-sm font-medium text-gray-700 mb-1">Monitor</label>
+                    <select id="monitorSelect" class="w-full p-2 border border-gray-300 rounded">
+                        <option value="">Carregando monitores...</option>
                     </select>
                 </div>
+                <!-- ========================== -->
+
                 <div>
                     <label for="startDate" class="block text-sm font-medium text-gray-700 mb-1">Data de Início</label>
                     <input type="date" id="startDate" class="w-full p-2 border border-gray-300 rounded">
@@ -61,8 +64,10 @@
             </div>
         </div>
 
+        <!-- O container do relatório permanece o mesmo -->
         <div id="report-container" class="hidden">
-            <div id="report-preview" class="bg-white p-8 rounded-lg shadow">
+           <!-- ... (o restante do arquivo não muda) ... -->
+           <div id="report-preview" class="bg-white p-8 rounded-lg shadow">
                 <header class="flex justify-between items-center pb-4 border-b">
                     <div class="flex items-center gap-4">
                         <img src="https://via.placeholder.com/150x50.png?text=Logo" alt="Logo da Empresa" class="h-12">
@@ -73,7 +78,6 @@
                         <p id="reportDateRange" class="text-sm text-gray-600"></p>
                     </div>
                 </header>
-
                 <main class="py-8">
                     <h3 class="text-lg font-semibold text-gray-700 mb-4">Resumo Geral de Disponibilidade</h3>
                     <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
@@ -90,21 +94,18 @@
                             <p id="reportDowntime" class="text-3xl font-bold text-red-600"></p>
                         </div>
                     </div>
-
                     <h3 class="text-lg font-semibold text-gray-700 mb-4">Log de Incidentes</h3>
                     <table class="w-full text-left border-collapse">
                         <thead class="bg-gray-200">
                             <tr>
                                 <th class="p-3 text-sm font-semibold text-gray-700 border">Data/Hora</th>
-                                <th class="p-3 text-sm font-semibold text-gray-700 border">Serviço Afetado</th>
+                                <th class="p-3 text-sm font-semibold text-gray-700 border">Duração da Falha</th>
                                 <th class="p-3 text-sm font-semibold text-gray-700 border">Status</th>
-                                <th class="p-3 text-sm font-semibold text-gray-700 border">Duração</th>
                             </tr>
                         </thead>
                         <tbody id="reportIncidentTbody" class="bg-white"></tbody>
                     </table>
                 </main>
-
                 <footer class="text-center mt-8 pt-4 border-t">
                     <p id="reportFooter" class="text-xs text-gray-500"></p>
                 </footer>

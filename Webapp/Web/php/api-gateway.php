@@ -15,9 +15,77 @@ require_once __DIR__ . '/vendor/firebase/jwt/src/Key.php';
 require_once __DIR__ . '/vendor/firebase/jwt/src/JWT.php';
 require_once __DIR__ . '/vendor/firebase/jwt/src/CachedKeySet.php';
 
+require_once __DIR__ . '/connection.php';
 
 use Firebase\JWT\JWT;
 use Firebase\JWT\Key;
+
+// ADIÇÃO INÍCIO: Classe para manipular a lógica dos relatórios diretamente neste arquivo
+class ReportHandler {
+    private $conn;
+
+    public function __construct() {
+        $this->conn = MariaDBConnection::getConnection();
+    }
+
+    public function handleGetMonitors() {
+        $query = "SELECT id, monitor_name FROM monitors ORDER BY monitor_name ASC";
+        $result = $this->conn->query($query);
+        if ($result) {
+            $monitors = $result->fetch_all(MYSQLI_ASSOC);
+            echo json_encode($monitors);
+        } else {
+            http_response_code(500);
+            echo json_encode(['status' => 'error', 'message' => 'Erro ao buscar monitores: ' . $this->conn->error]);
+        }
+    }
+
+    public function handleGetReportData() {
+        if (!isset($_GET['monitor_id']) || !isset($_GET['start_date']) || !isset($_GET['end_date'])) {
+            http_response_code(400);
+            echo json_encode(['status' => 'error', 'message' => 'Parâmetros ausentes: monitor_id, start_date e end_date são obrigatórios.']);
+            return;
+        }
+
+        $monitor_id = intval($_GET['monitor_id']);
+        $start_date = $_GET['start_date'] . ' 00:00:00';
+        $end_date = $_GET['end_date'] . ' 23:59:59';
+        
+        $query = "
+            SELECT 
+                rd.timestamp, 
+                rd.success,
+                JSON_UNQUOTE(JSON_EXTRACT(m.parameters, '$.request_interval')) AS request_interval
+            FROM raw_data AS rd
+            JOIN monitors AS m ON rd.monitor_id = m.id
+            WHERE rd.monitor_id = ? 
+            AND rd.timestamp BETWEEN ? AND ?
+            ORDER BY rd.timestamp ASC
+        ";
+
+        $stmt = $this->conn->prepare($query);
+        if (!$stmt) {
+            http_response_code(500);
+            echo json_encode(['status' => 'error', 'message' => 'Erro na preparação da consulta: ' . $this->conn->error]);
+            return;
+        }
+
+        $stmt->bind_param("iss", $monitor_id, $start_date, $end_date);
+        $stmt->execute();
+        $result = $stmt->get_result();
+        
+        if ($result) {
+            $data = $result->fetch_all(MYSQLI_ASSOC);
+            echo json_encode($data);
+        } else {
+            http_response_code(500);
+            echo json_encode(['status' => 'error', 'message' => 'Erro ao buscar dados do relatório: ' . $stmt->error]);
+        }
+        
+        $stmt->close();
+    }
+}
+// ADIÇÃO FIM
 
 // Função para autenticar a requisição usando JWT
 function authenticateRequest($headers) {
@@ -153,6 +221,25 @@ if (isset($_GET['endpoint'])) {
 
 $method = $_SERVER['REQUEST_METHOD'];
 $headers = getallheaders();
+
+// MODIFICAÇÃO INÍCIO: Bloco de Roteamento Principal
+// Adicionamos as verificações para as rotas de relatório ANTES da lógica de encaminhamento.
+
+// 1. Roteamento local para as requisições de relatório
+if ($effectivePath === '/monitors' && $method === 'GET') {
+    $handler = new ReportHandler();
+    $handler->handleGetMonitors();
+    exit; // Importante: Termina a execução para não passar para a lógica de proxy
+}
+
+if ($effectivePath === '/report_data' && $method === 'GET') {
+    // Verifica se os parâmetros necessários para o relatório estão presentes
+    if (isset($_GET['monitor_id']) && isset($_GET['start_date']) && isset($_GET['end_date'])) {
+        $handler = new ReportHandler();
+        $handler->handleGetReportData();
+        exit; // Termina a execução
+    }
+}
 
 $userLoginRoutes = [
     '/login'
