@@ -15,7 +15,18 @@ CREATE TABLE IF NOT EXISTS agents (
     name VARCHAR(255),
     last_seen DATETIME,
     status ENUM('active', 'inactive', 'maintenance') DEFAULT 'active'
-);  
+);
+
+CREATE TABLE IF NOT EXISTS incidentes (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  titulo VARCHAR(255) NOT NULL,
+  descricao TEXT NOT NULL,
+  impacto VARCHAR(50) NOT NULL,
+  tipo VARCHAR(50) NOT NULL,
+  servico VARCHAR(100) NOT NULL,
+  estado_atual VARCHAR(50) NOT NULL DEFAULT 'Identificado',
+  criado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+  resolvido_em TIMESTAMP DEFAULT NULL
 
 -- Nova tabela de definição de monitores
 CREATE TABLE IF NOT EXISTS monitors (

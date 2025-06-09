@@ -1,100 +1,106 @@
 <!DOCTYPE html>
 <html lang="pt-BR">
-
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>Incidentes</title>
   <script src="js/incidentes.js" defer></script>
   <script src="https://cdn.tailwindcss.com"></script>
 </head>
-
-
 <body class="bg-gray-50">
+
   <div class="max-w-6xl mx-auto px-4 py-8">
     <!-- Navegação -->
     <div class="flex flex-wrap gap-4 border-b pb-4 mb-6">
-      <a href="index.html" class="font-medium text-gray-500 hover:text-gray-700">Visão Geral</a>
-      <a href="#" class="font-medium text-blue-600">Incidentes</a>
-      <a href="relatorios.html" class="font-medium text-gray-500 hover:text-gray-700">Relatórios de SLA</a>
-      <a href="#" class="font-medium text-gray-500 hover:text-gray-700">Anúncios</a>
-      <a href="#" class="font-medium text-gray-500 hover:text-gray-700">Eventos Agendados</a>
-      <a href="criar-monitor.html" class="font-medium text-gray-500 hover:text-gray-700">Criar Monitor</a>
+      <a href="index.html"            class="font-medium text-gray-500 hover:text-gray-700">Visão Geral</a>
+      <a href="incidentes.html"     class="font-medium text-blue-600">Incidentes</a>
+      <a href="relatorios.html"     class="font-medium text-gray-500 hover:text-gray-700">Relatórios de SLA</a>
+      <a href="anuncios.html"       class="font-medium text-gray-500 hover:text-gray-700">Anúncios</a>
+      <a href="eventos.html"        class="font-medium text-gray-500 hover:text-gray-700">Eventos Agendados</a>
+      <a href="criar-monitor.html"  class="font-medium text-gray-500 hover:text-gray-700">Criar Monitor</a>
       <a href="config-sistema.html" class="font-medium text-gray-500 hover:text-gray-700">Configurar Sistema</a>
-      <a href="#" class="font-medium text-gray-500 hover:text-gray-700 ml-auto">Assinar</a>
+      <a href="assinar.html"        class="font-medium text-gray-500 hover:text-gray-700 ml-auto">Assinar</a>
     </div>
 
-    <!-- Botão Criar Incidente -->
-    <div class="mb-6 flex justify-start">
-      <button id="openModalBtn" class="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700">
-        Criar Incidente
-      </button>
-    </div>
+    <!-- Botão criar -->
+    <button id="openModalBtn"
+            class="mb-6 bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700">
+      Criar Incidente
+    </button>
 
-    <!-- Modal -->
-    <div id="incidentModal" class="fixed inset-0 bg-black bg-opacity-50 z-50 hidden flex items-center justify-center">
-      <div class="bg-white rounded-lg shadow-lg w-full max-w-2xl mx-4 p-6 relative">
-        <button id="closeModalBtn"
-          class="absolute top-2 right-2 text-gray-500 hover:text-gray-800 text-2xl">&times;</button>
-        <h2 class="text-xl font-medium text-gray-800 mb-4">Novo Incidente</h2>
-
-        <form id="incidentForm" class="space-y-5">
-          <input type="text" id="titulo" required placeholder="Título do incidente"
-            class="w-full p-2 border border-gray-300 rounded" />
-
-          <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">Impacto</label>
-            <select id="impacto" class="w-full p-2 border border-gray-300 rounded">
-              <option value="major">Major Outage</option>
-              <option value="partial">Partial Outage</option>
-              <option value="degraded">Degraded Performance</option>
-            </select>
-          </div>
-
-          <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">Tipo de Aviso</label>
-            <select id="tipoAviso" class="w-full p-2 border border-gray-300 rounded">
-              <option value="problem">Problem</option>
-              <option value="warning">Warning</option>
-              <option value="informative">Informative</option>
-              <option value="maintenance">Maintenance</option>
-            </select>
-          </div>
-
-          <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">Serviço Afetado</label>
-            <select id="servicoAfetado" class="w-full p-2 border border-gray-300 rounded">
-              <option value="servico-teste">Serviço Teste</option>
-            </select>
-          </div>
-
-          <div id="maintenanceFields" class="hidden">
-            <label class="block text-sm font-medium text-gray-700 mb-1">Período de Manutenção</label>
-            <div class="flex gap-4">
-              <input type="datetime-local" id="inicioManutencao" class="w-1/2 p-2 border border-gray-300 rounded" />
-              <input type="datetime-local" id="fimManutencao" class="w-1/2 p-2 border border-gray-300 rounded" />
-            </div>
-          </div>
-
-          <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">Descrição (Markdown)</label>
-            <textarea id="descricao" rows="5" required class="w-full p-2 border border-gray-300 rounded"
-              placeholder="Escreva os detalhes..."></textarea>
-          </div>
-
-          <div class="flex justify-end">
-            <button type="submit" class="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700">
-              Criar Incidente
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
-
-    <!-- Lista de Incidentes -->
-    <h2 class="text-xl font-medium text-gray-800 mb-4">Incidentes Ativos</h2>
+    <!-- Lista de incidentes -->
     <ul id="incidentList" class="space-y-4"></ul>
   </div>
-</body>
 
+  <!-- Modal -->
+  <div id="incidentModal"
+       class="fixed inset-0 bg-black bg-opacity-50 z-50 hidden flex items-center justify-center">
+    <div class="bg-white rounded-lg shadow-lg w-full max-w-2xl mx-4 p-6 relative">
+      <button id="closeModalBtn"
+              class="absolute top-3 right-3 text-gray-500 hover:text-gray-800 text-2xl">&times;</button>
+      <h2 class="text-2xl font-semibold mb-4">Novo Incidente</h2>
+
+      <div id="formError" class="text-red-600 mb-4"></div>
+
+      <form id="incidentForm" class="space-y-5">
+        <div>
+          <label for="titulo" class="block text-sm font-medium text-gray-700 mb-1">Título</label>
+          <input id="titulo" name="titulo" type="text" required
+                 class="w-full border border-gray-300 rounded p-2 focus:outline-none focus:ring-blue-500"/>
+        </div>
+
+        <div>
+          <label for="descricao" class="block text-sm font-medium text-gray-700 mb-1">Descrição</label>
+          <textarea id="descricao" name="descricao" rows="4" required
+                    class="w-full border border-gray-300 rounded p-2 focus:outline-none focus:ring-blue-500"></textarea>
+        </div>
+
+        <div>
+          <label for="impacto" class="block text-sm font-medium text-gray-700 mb-1">Impacto</label>
+          <select id="impacto" name="impacto" required
+                  class="w-full border border-gray-300 rounded p-2 focus:outline-none focus:ring-blue-500">
+            <option value="major">Major Outage</option>
+            <option value="partial">Partial Outage</option>
+            <option value="degraded">Degraded Performance</option>
+          </select>
+        </div>
+
+        <div>
+          <label for="tipo" class="block text-sm font-medium text-gray-700 mb-1">Tipo</label>
+          <select id="tipo" name="tipo" required
+                  class="w-full border border-gray-300 rounded p-2 focus:outline-none focus:ring-blue-500">
+            <option value="problem">Problem</option>
+            <option value="warning">Warning</option>
+            <option value="informative">Informative</option>
+            <option value="maintenance">Maintenance</option>
+          </select>
+        </div>
+
+        <div id="maintenanceFields" class="hidden">
+          <label class="block text-sm font-medium text-gray-700 mb-1">Período de Manutenção</label>
+          <div class="flex gap-4">
+            <input id="inicioManutencao" name="inicioManutencao" type="datetime-local"
+                   class="w-1/2 border border-gray-300 rounded p-2 focus:outline-none focus:ring-blue-500"/>
+            <input id="fimManutencao"    name="fimManutencao"    type="datetime-local"
+                   class="w-1/2 border border-gray-300 rounded p-2 focus:outline-none focus:ring-blue-500"/>
+          </div>
+        </div>
+
+        <div>
+          <label for="servico" class="block text-sm font-medium text-gray-700 mb-1">Serviço Afetado</label>
+          <input id="servico" name="servico" type="text" required
+                 class="w-full border border-gray-300 rounded p-2 focus:outline-none focus:ring-blue-500"/>
+        </div>
+
+        <div class="flex justify-end">
+          <button type="submit"
+                  class="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700">
+            Salvar Incidente
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+</body>
 </html>
