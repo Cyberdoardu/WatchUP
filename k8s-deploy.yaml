@@ -12,6 +12,19 @@ spec:
     requests:
       storage: 1Gi
 
+# --- ADICIONADO: PVC para as credenciais do agente ---
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: agent-credentials-pvc
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 100Mi # Um tamanho pequeno é suficiente
+
 ---
 # --- ConfigMap para o script de inicialização do MariaDB ---
 apiVersion: v1
@@ -105,16 +118,20 @@ spec:
             - containerPort: 5000
           env:
             - name: DB_HOST
-              value: "mariadb" # <<< CORRIGIDO: Voltando ao nome simples do serviço
+              value: "mariadb"
             - name: DB_NAME
               value: "watchup"
             - name: DB_USER
               value: "watchuser"
             - name: DB_PASSWORD
               value: "watchpassword"
+            - name: JWT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: jwt-secret
+                  key: JWT_SECRET
 ---
 # --- Central Server Service (Externo) ---
-# Mantido como LoadBalancer para acesso direto à API, se necessário
 apiVersion: v1
 kind: Service
 metadata:
@@ -155,12 +172,23 @@ spec:
           imagePullPolicy: IfNotPresent
           env:
             - name: CENTRAL_SERVER_URL
-              value: "http://central-server:5000" # <<< CORRIGIDO: Voltando ao nome simples do serviço
+              value: "http://central-server:5000"
             - name: AGENT_NAME
               value: "agent-01"
+            # --- ADICIONADO: AGENT_ID que estava faltando ---
+            - name: AGENT_ID
+              value: "agent-01-id"
             - name: CHECK_INTERVAL
               value: "30"
-
+          # --- ADICIONADO: Montagem do volume de credenciais ---
+          volumeMounts:
+            - name: agent-credentials-storage
+              mountPath: /credentials
+      # --- ADICIONADO: Definição do volume que usa o PVC ---
+      volumes:
+        - name: agent-credentials-storage
+          persistentVolumeClaim:
+            claimName: agent-credentials-pvc
 ---
 # --- Webapp Deployment ---
 apiVersion: apps/v1
@@ -185,7 +213,6 @@ spec:
           imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 80
-          # --- A ÚNICA ALTERAÇÃO FOI ADICIONAR ESTE BLOCO ---
           env:
             - name: JWT_SECRET
               valueFrom:
