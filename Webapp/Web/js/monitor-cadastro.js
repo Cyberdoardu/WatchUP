@@ -37,6 +37,6 @@ document.addEventListener('DOMContentLoaded', function() {
     });
 
     menuButton.addEventListener('click', function() {
-        window.location.href = 'menu.html';
+        window.location.href = 'index.html';
     });
 });

@@ -26,7 +26,9 @@ document.addEventListener('DOMContentLoaded', () => {
     // --- CARREGA OS MONITORES DA API ---
     async function loadMonitors() {
         try {
-            const response = await fetch('php/api-gateway.php?endpoint=monitors');
+            const response = await fetch('php/api-gateway.php?endpoint=monitors', {
+                headers: getAuthHeaders()
+            });
             if (!response.ok) {
                 throw new Error('Erro de rede ao buscar monitores.');
             }
@@ -73,8 +75,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 end_date: endDateStr
             });
 
-            const response = await fetch(`php/api-gateway.php?endpoint=report_data&${params}`);
-            
+            const response = await fetch(`php/api-gateway.php?endpoint=report_data&${params}`, {
+                headers: getAuthHeaders()
+            });            
             if (!response.ok) {
                  const errorData = await response.json();
                  throw new Error(errorData.message || 'Erro de rede ao buscar dados do relatório.');

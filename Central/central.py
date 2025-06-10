@@ -8,6 +8,8 @@ import threading
 import mysql.connector
 from mysql.connector import Error, pooling
 from dotenv import load_dotenv
+from functools import wraps
+import secrets
 
 load_dotenv()
 
@@ -38,6 +40,41 @@ def create_connection_pool():
 
 connection_pool = create_connection_pool()
 
+# --- DECORATOR DE AUTENTICAÇÃO DE AGENTE ---
+def agent_api_key_required(f):
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        api_key = request.headers.get('X-API-Key')
+        agent_id = request.headers.get('X-Agent-ID')
+
+        if not api_key or not agent_id:
+            return jsonify({'error': 'Cabeçalhos de autenticação do agente ausentes'}), 401
+
+        conn = None
+        cursor = None
+        try:
+            conn = connection_pool.get_connection()
+            cursor = conn.cursor(dictionary=True)
+            cursor.execute("SELECT api_key_hash FROM agents WHERE agent_id = %s AND status = 'active'", (agent_id,))
+            agent = cursor.fetchone()
+
+            if not agent or not hashlib.sha256(api_key.encode()).hexdigest() == agent['api_key_hash']:
+                return jsonify({'error': 'Agente não autorizado ou chave inválida'}), 403
+            
+            # Passa o ID do agente para a função da rota
+            kwargs['agent_id'] = agent_id
+            
+        except Error as e:
+            app.logger.error(f"Erro de banco de dados na autenticação do agente: {e}")
+            return jsonify({'error': 'Erro interno do servidor'}), 500
+        finally:
+            if conn and conn.is_connected():
+                if cursor:
+                    cursor.close()
+                conn.close()
+        
+        return f(*args, **kwargs)
+    return decorated_function
 
 def hash_agent_name(agent_name, salt):
     combined = f"{agent_name}:{salt}"
@@ -69,45 +106,122 @@ def cleanup_inactive_agents():
 
 
 
-@app.route('/register', methods=['POST'])
-def register_agent():
+@app.route('/preregister-agent', methods=['POST'])
+def preregister_agent():
+    """
+    Endpoint para a WebApp pré-registrar um agente.
+    Cria um agente com status 'pending' e um tempo de expiração.
+    """
     conn = None
     cursor = None
     try:
         data = request.json
-        agent_name = data['agent_name']
-        hashed_agent_name = hash_agent_name(agent_name, SALT)
+        agent_name = data.get('agent_name')
+        if not agent_name:
+            return jsonify({'error': 'O nome do agente é obrigatório'}), 400
+
+        # Gera um ID único para o agente no momento do pré-registro
+        agent_id = hashlib.sha256(f"{agent_name}-{secrets.token_hex(8)}".encode()).hexdigest()
+        expiration_time = datetime.now() + timedelta(minutes=15)
 
         conn = connection_pool.get_connection()
         cursor = conn.cursor()
         
-        # Check if the agent with the calculated hash already exists
-        cursor.execute("SELECT * FROM agents WHERE agent_id = %s", (hashed_agent_name,))
-        existing_agent = cursor.fetchone()
-
-        if existing_agent:
-            # Agent exists, updating last_seen and returning re-login message
-            cursor.execute("UPDATE agents SET last_seen = %s WHERE agent_id = %s", (datetime.now(), hashed_agent_name))
-            conn.commit()
-            return jsonify({'message': 'Agent re-logged in successfully'}), 200
-
-        # Agent does not exist, registering new agent
+        # Inserir ou atualizar o pré-registro
         cursor.execute(
-            "INSERT INTO agents (agent_id, last_seen, name) VALUES (%s, %s, %s)",
-            (hashed_agent_name, datetime.now(), agent_name)
+            """INSERT INTO agents (agent_id, name, status, prereg_expires)
+               VALUES (%s, %s, 'pending', %s)
+               ON DUPLICATE KEY UPDATE agent_id = VALUES(agent_id), status = 'pending', prereg_expires = VALUES(prereg_expires)""",
+            (agent_id, agent_name, expiration_time)
         )
         conn.commit()
-        return jsonify({'message': 'Agent registered successfully'}), 201
-    except mysql.connector.Error as err:
-        if conn:
-            conn.rollback()
-        app.logger.error(f"Database error: {err}")
-        return jsonify({'error': f'Database error: {err}'}), 500
-    except Exception as err:
-        return jsonify({'error': f'An unexpected error occurred: {err}'}), 500
+
+        return jsonify({
+            'message': 'Agente pré-registrado com sucesso. O agente tem 15 minutos para completar o registro.',
+            'agent_id': agent_id,
+            'agent_name': agent_name
+        }), 201
+
+    except Error as e:
+        if conn: conn.rollback()
+        app.logger.error(f"Erro ao pré-registrar agente: {e}")
+        return jsonify({'error': f'Erro de banco de dados: {e}'}), 500
     finally:
         if conn and conn.is_connected():
-            cursor.close()
+            if cursor: cursor.close()
+            conn.close()
+
+@app.route('/register', methods=['POST'])
+def register_agent():
+    """
+    Endpoint para o Agente se registrar.
+    Verifica se existe um pré-registro válido e, em caso afirmativo, gera e retorna uma chave de API.
+    """
+    conn = None
+    cursor = None
+    try:
+        data = request.json
+        agent_name = data.get('agent_name')
+        agent_id = data.get('agent_id') # O ID gerado no pré-registro
+
+        if not agent_name or not agent_id:
+            return jsonify({'error': 'Nome e ID do agente são obrigatórios'}), 400
+
+        conn = connection_pool.get_connection()
+        cursor = conn.cursor(dictionary=True)
+
+        # Caso especial para o primeiro agente (do docker-compose)
+        cursor.execute("SELECT COUNT(*) as count FROM agents")
+        is_first_agent = cursor.fetchone()['count'] == 0
+
+        if is_first_agent:
+            # Registro automático para o primeiro agente
+            api_key = secrets.token_hex(32)
+            api_key_hash = hashlib.sha256(api_key.encode()).hexdigest()
+            
+            cursor.execute(
+                """INSERT INTO agents (agent_id, name, status, api_key_hash, last_seen)
+                   VALUES (%s, %s, 'active', %s, %s)""",
+                (agent_id, agent_name, api_key_hash, datetime.now())
+            )
+            conn.commit()
+            return jsonify({
+                'message': 'Primeiro agente registrado automaticamente com sucesso!',
+                'api_key': api_key
+            }), 200
+
+        # Verificação do pré-registro para outros agentes
+        cursor.execute(
+            "SELECT * FROM agents WHERE agent_id = %s AND name = %s AND status = 'pending' AND prereg_expires > NOW()",
+            (agent_id, agent_name)
+        )
+        agent = cursor.fetchone()
+
+        if not agent:
+            return jsonify({'error': 'Registro inválido, expirado ou não encontrado. Contate o administrador.'}), 403
+
+        # Gera a chave de API e atualiza o agente para 'active'
+        api_key = secrets.token_hex(32)
+        api_key_hash = hashlib.sha256(api_key.encode()).hexdigest()
+        
+        cursor.execute(
+            "UPDATE agents SET status = 'active', api_key_hash = %s, last_seen = %s, prereg_expires = NULL WHERE agent_id = %s",
+            (api_key_hash, datetime.now(), agent_id)
+        )
+        conn.commit()
+
+        return jsonify({
+            'message': 'Agente registrado com sucesso!',
+            'api_key': api_key
+        }), 200
+
+    except Error as e:
+        if conn: conn.rollback()
+        app.logger.error(f"Erro no registro do agente: {e}")
+        return jsonify({'error': f'Database error: {e}'}), 500
+    finally:
+        if conn and conn.is_connected():
+            if cursor: cursor.close()
             conn.close()
 
 
@@ -166,27 +280,28 @@ def create_agent():
 
 
 @app.route('/heartbeat', methods=['POST'])
-def receive_heartbeat():
-    data = request.json
-    agent_id = data['agent_id']
-    
+@agent_api_key_required
+def receive_heartbeat(agent_id): # <<< CORREÇÃO: Adicionado o parâmetro 'agent_id'
+    """Recebe um sinal de vida do agente e atualiza seu status no banco."""
+    conn = None
+    cursor = None
     try:
         conn = connection_pool.get_connection()
         cursor = conn.cursor()
         
         cursor.execute(
             "UPDATE agents SET last_seen = %s WHERE agent_id = %s",
-            (datetime.now(), agent_id)
+            (datetime.now(), agent_id) # Usa o agent_id passado pelo decorator
         )
         
         conn.commit()
         return jsonify({'status': 'acknowledged'})
     except Error as e:
-        app.logger.error(f"Erro no heartbeat: {e}")
+        app.logger.error(f"Erro no heartbeat para o agente {agent_id}: {e}")
         return jsonify({'error': str(e)}), 500
     finally:
-        if conn.is_connected():
-            cursor.close()
+        if conn and conn.is_connected():
+            if cursor: cursor.close()
             conn.close()
 
 @app.route('/health')
@@ -204,38 +319,21 @@ def health_check():
             conn.close()
 
             
-@app.route('/targets', methods=['GET', 'POST'])
-def handle_targets():
-    agent_id = request.args.get('agent_id')
-    
+@app.route('/targets', methods=['GET'])
+@agent_api_key_required
+def handle_targets(agent_id): # <<< CORREÇÃO: Adicionado o parâmetro 'agent_id'
+    """Retorna a lista de monitores (alvos) para um agente autenticado."""
+    conn = None
+    cursor = None
     try:
         conn = connection_pool.get_connection()
         cursor = conn.cursor(dictionary=True)
         
-        if request.method == 'POST':
-            # Nova forma de armazenar targets usando a tabela monitor_assignments
-            monitors = request.json
-            cursor.execute("DELETE FROM monitor_assignments WHERE agent_id = %s", (agent_id,))
-            
-            for monitor in monitors:
-                cursor.execute(
-                    """INSERT INTO monitor_assignments 
-                    (agent_id, monitor_id, is_primary) 
-                    VALUES (%s, %s, %s)
-                    ON DUPLICATE KEY UPDATE is_primary = VALUES(is_primary)""",
-                    (agent_id, monitor['id'], monitor.get('is_primary', True))
-                )
-            
-            conn.commit()
-            return jsonify({'status': 'targets updated'})
-        
-        # Buscar monitors atribuídos ao agent
+        # A lógica da query agora usa o agent_id seguro vindo do decorator
         cursor.execute("""
             SELECT 
-                m.id,
-                m.monitor_name,
-                m.check_type,
-                JSON_UNQUOTE(m.parameters) as parameters  # Deserializa JSON
+                m.id, m.monitor_name, m.check_type,
+                JSON_UNQUOTE(m.parameters) as parameters
             FROM monitors m
             INNER JOIN monitor_assignments ma ON m.id = ma.monitor_id
             WHERE ma.agent_id = %s
@@ -243,22 +341,23 @@ def handle_targets():
         
         results = cursor.fetchall()
         
-        # Parsear os parâmetros para dicionários
         for item in results:
             try:
-                item['parameters'] = json.loads(item['parameters'])
-            except Exception as e:
-                app.logger.error(f"Erro ao parsear parâmetros: {e}")
+                # O ideal é que o JSON no banco seja sempre válido,
+                # mas uma verificação extra não custa nada.
+                if isinstance(item['parameters'], str):
+                    item['parameters'] = json.loads(item['parameters'])
+            except (json.JSONDecodeError, TypeError):
                 item['parameters'] = {}
 
         return jsonify(results)
     
     except Error as e:
-        app.logger.error(f"Targets error: {e}")
+        app.logger.error(f"Erro ao buscar targets para o agente {agent_id}: {e}")
         return jsonify({'error': str(e)}), 500
     finally:
-        if conn.is_connected():
-            cursor.close()
+        if conn and conn.is_connected():
+            if cursor: cursor.close()
             conn.close()
 
 def count_consecutive_failures(cursor, monitor_id):
@@ -341,6 +440,7 @@ def update_monitor_status(conn, cursor, monitor_id, response_time, success):
 
 
 @app.route('/metrics', methods=['POST'])
+@agent_api_key_required
 def receive_metrics():
     try:
         data = request.json

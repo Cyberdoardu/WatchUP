@@ -7,14 +7,17 @@ CREATE TABLE IF NOT EXISTS usuarios (
     email VARCHAR(100) NOT NULL UNIQUE,
     senha VARCHAR(255) NOT NULL,
     username VARCHAR(50) NOT NULL UNIQUE,
-    admin BOOLEAN NOT NULL DEFAULT 0
+    admin BOOLEAN NOT NULL DEFAULT 0,
+    role VARCHAR(20) NOT NULL DEFAULT 'user' -- Adicionado para RBAC
 );
 
 CREATE TABLE IF NOT EXISTS agents (
     agent_id VARCHAR(255) PRIMARY KEY,
-    name VARCHAR(255),
+    name VARCHAR(255) NOT NULL UNIQUE, -- Nome do agente deve ser único
     last_seen DATETIME,
-    status ENUM('active', 'inactive', 'maintenance') DEFAULT 'active'
+    status ENUM('active', 'inactive', 'maintenance', 'pending') DEFAULT 'pending', -- 'pending' para pré-registro
+    api_key_hash VARCHAR(255) DEFAULT NULL, -- Hash da chave de API
+    prereg_expires DATETIME DEFAULT NULL -- Timestamp de expiração do pré-registro
 );
 
 CREATE TABLE IF NOT EXISTS incidentes (
@@ -25,8 +28,9 @@ CREATE TABLE IF NOT EXISTS incidentes (
   tipo VARCHAR(50) NOT NULL,
   servico VARCHAR(100) NOT NULL,
   estado_atual VARCHAR(50) NOT NULL DEFAULT 'Identificado',
-  criado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+  criado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   resolvido_em TIMESTAMP DEFAULT NULL
+);
 
 -- Nova tabela de definição de monitores
 CREATE TABLE IF NOT EXISTS monitors (

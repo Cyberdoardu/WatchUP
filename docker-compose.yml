@@ -26,6 +26,7 @@ services:
       - DB_NAME=watchup
       - DB_USER=watchuser
       - DB_PASSWORD=watchpassword
+      - JWT_SECRET=${JWT_SECRET}
     depends_on:
       - mariadb
     networks:
@@ -33,16 +34,12 @@ services:
 
   monitoring-agent:
     build: ./Agent
+    volumes:
+      - agent_credentials:/credentials # Volume para persistir a chave
     environment:
       - CENTRAL_SERVER_URL=http://central-server:5000
       - AGENT_NAME=agent-01
-      - CHECK_INTERVAL=30
-    dns:
-      - 8.8.8.8
-      - 1.1.1.1
-    sysctls:
-      - net.ipv4.ip_local_port_range=1024 65535
-
+      - AGENT_ID=agent-01-id # ID fixo para o agente inicial
     depends_on:
       - central-server
     networks:
@@ -56,6 +53,8 @@ services:
       - "8080:80"
     volumes:
       - ./Webapp/Web:/var/www/html
+    environment:
+      - JWT_SECRET=${JWT_SECRET}
     depends_on:
       - mariadb
     networks:
@@ -67,3 +66,4 @@ networks:
 
 volumes:
   mariadb_data:
+  agent_credentials:

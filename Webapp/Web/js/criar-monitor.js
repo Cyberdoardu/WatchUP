@@ -8,14 +8,12 @@ document.addEventListener('DOMContentLoaded', function () {
     const menuButton = document.getElementById('menuButton');
 
     menuButton.addEventListener('click', function() {
-        window.location.href = 'menu.html';
+        window.location.href = 'index.html';
     });
 
     fetch('php/api-gateway.php?endpoint=agents', {
         method: 'GET',
-        headers: {
-            'Accept': 'application/json' 
-        }
+        headers: getAuthHeaders()
     })
     .then(response => {
         console.log('Response Status (Agents):', response.status);
@@ -118,9 +116,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
         fetch('php/api-gateway.php?endpoint=monitors', { 
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
+            headers: getAuthHeaders(),
             body: JSON.stringify(monitorData)
         })
         .then(response => {
@@ -141,7 +137,7 @@ document.addEventListener('DOMContentLoaded', function () {
             // e em erro, retorna um objeto com uma chave 'error'.
             if (data.id && !data.error) { // Sucesso se tiver um 'id' e não tiver 'error'
                 alert('Monitor criado com sucesso! ID: ' + data.id);
-                window.location.href = 'menu.html'; 
+                window.location.href = 'index.html'; 
             } else if (data.error) { // Erro explícito do backend
                 alert('Erro ao criar monitor: ' + (data.error || 'Erro desconhecido do servidor.'));
             } else {

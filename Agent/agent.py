@@ -4,17 +4,49 @@ import subprocess
 import requests
 import re
 import hashlib
-from threading import Thread
+import json
+from threading import Thread, Lock
 from flask import Flask, request, jsonify
 import logging
 from datetime import datetime
+import json
 logging.basicConfig(level=logging.INFO)
 
 targets = []
-registered = False
+agent_credentials = {}
+credentials_lock = Lock()
+CREDENTIALS_PATH = '/credentials/credentials.json'
+CENTRAL_SERVER_URL = os.environ.get('CENTRAL_SERVER_URL')
 
 SALT = "salzinho_pra_dar_g0st0"
 
+
+# --- Lógica de Credenciais ---
+def load_credentials():
+    """Carrega as credenciais do arquivo JSON, se existir."""
+    global agent_credentials
+    if os.path.exists(CREDENTIALS_PATH):
+        try:
+            with credentials_lock:
+                with open(CREDENTIALS_PATH, 'r') as f:
+                    agent_credentials = json.load(f)
+                    if 'agent_id' in agent_credentials and 'api_key' in agent_credentials:
+                        logging.info("Credenciais do agente carregadas do arquivo.")
+                        return True
+        except (json.JSONDecodeError, IOError) as e:
+            logging.error(f"Não foi possível carregar o arquivo de credenciais: {e}")
+    return False
+
+def save_credentials():
+    """Salva as credenciais no arquivo JSON."""
+    try:
+        os.makedirs(os.path.dirname(CREDENTIALS_PATH), exist_ok=True)
+        with credentials_lock:
+            with open(CREDENTIALS_PATH, 'w') as f:
+                json.dump(agent_credentials, f, indent=4)
+            logging.info(f"Credenciais salvas para o agente ID: {agent_credentials.get('agent_id')}")
+    except IOError as e:
+        logging.error(f"Não foi possível salvar o arquivo de credenciais: {e}")
 
 def ping_check(target, timeout=5, count=4):
     command = f"ping -c {count} -W {timeout} {target}"
@@ -126,161 +158,153 @@ def hash_agent_name(agent_name, salt):
     return hashed
 
 def register_agent():
-    global registered
-    max_retries = 10
-    retry_count = 0
-    
-    while not registered and retry_count < max_retries:
-        try:
-            hashed_agent_id = hash_agent_name(os.environ['AGENT_NAME'], SALT)
-            response = requests.post(
-                f"{os.environ['CENTRAL_SERVER_URL']}/register",
-                json={'agent_name': os.environ['AGENT_NAME'], 'agent_id': hashed_agent_id},
-                timeout=10
-                
-            )
-            if response.ok:
-                registered = True
-                print("Registro bem-sucedido!")
-                return
-            retry_count += 1
-            time.sleep(2 ** retry_count)  # Backoff exponencial
-        except Exception as e:
-            print(f"Erro de registro ({retry_count}/{max_retries}): {str(e)}")
-            retry_count += 1
-            time.sleep(5)
+    """Registra o agente se não houver credenciais."""
+    with credentials_lock:
+        if agent_credentials:
+            logging.info("Agente já possui credenciais, pulando registro.")
+            return True # Indica que as credenciais estão prontas
 
+    agent_name = os.environ.get('AGENT_NAME')
+    agent_id = os.environ.get('AGENT_ID') 
+
+    if not agent_name or not agent_id:
+        logging.critical("AGENT_NAME e AGENT_ID devem ser definidos. Terminando o processo de registro.")
+        return False
+
+    logging.info(f"Tentando registrar o agente '{agent_name}' com ID '{agent_id}'...")
+    
+    for i in range(5):
+        try:
+            response = requests.post(
+                f"{CENTRAL_SERVER_URL}/register",
+                json={'agent_name': agent_name, 'agent_id': agent_id},
+                timeout=10
+            )
+            response.raise_for_status()
+            
+            data = response.json()
+            with credentials_lock:
+                agent_credentials['api_key'] = data['api_key']
+                agent_credentials['agent_id'] = agent_id
+            save_credentials()
+            logging.info(f"Agente registrado com sucesso! Mensagem: {data['message']}")
+            return True
+        except requests.exceptions.RequestException as e:
+            logging.error(f"Falha na tentativa {i+1} de registro: {e}")
+            time.sleep(10)
+    
+    return False # Retorna falso se não conseguir registrar
+
+def get_auth_headers():
+    """Retorna os cabeçalhos de autenticação para as requisições."""
+    with credentials_lock:
+        if not agent_credentials:
+            return None
+        return {
+            'X-API-Key': agent_credentials.get('api_key'),
+            'X-Agent-ID': agent_credentials.get('agent_id')
+        }
             
 def send_heartbeat():
-    hashed_agent_id = hash_agent_name(os.environ['AGENT_NAME'], SALT)
+    """Envia heartbeats periódicos para o servidor central."""
     while True:
-        try:
-            requests.post(
-                f"{os.environ['CENTRAL_SERVER_URL']}/heartbeat",
-                json={'agent_id': hashed_agent_id},
-                timeout=3
-            )
-        except Exception as e:
-            print(f"Falha no heartbeat: {str(e)}")
+        headers = get_auth_headers()
+        if headers:
+            try:
+                requests.post(
+                    f"{CENTRAL_SERVER_URL}/heartbeat",
+                    headers=headers,
+                    timeout=5
+                )
+            except requests.exceptions.RequestException as e:
+                logging.error(f"Falha no heartbeat: {e}")
         time.sleep(30)
 
 def update_targets():
-    hashed_agent_id = hash_agent_name(os.environ['AGENT_NAME'], SALT)
+    """Busca a lista de monitores (alvos) do servidor central."""
+    global targets
     while True:
-        try:
-            print(f"\n=== ATUALIZANDO TARGETS ===")
-            response = requests.get(
-                f"{os.environ['CENTRAL_SERVER_URL']}/targets?agent_id={hashed_agent_id}",
-                params={'agent': os.environ['AGENT_NAME']},
-                timeout=5
-            )
-            print(f"Status Code: {response.status_code}")
-            
-            if response.ok:
-                global targets
-                targets = response.json() or []
-                print(f"Targets recebidos ({len(targets)}):")
-                for t in targets:
-                    print(f" - {t['monitor_name']} ({t['check_type']})")
-                    print(f"   Parâmetros: {t['parameters']}")
-            else:
-                print(f"Erro HTTP: {response.status_code}")
-                print(f"Resposta: {response.text}")
-                
-        except Exception as e:
-            print(f"Erro geral: {str(e)}")
-        
-        time.sleep(10)
+        headers = get_auth_headers()
+        if headers:
+            try:
+                logging.info("Atualizando lista de alvos...")
+                response = requests.get(
+                    f"{CENTRAL_SERVER_URL}/targets",
+                    headers=headers,
+                    timeout=10
+                )
+                if response.ok:
+                    with credentials_lock:
+                        targets = response.json() or []
+                    logging.info(f"{len(targets)} alvos recebidos.")
+                else:
+                    logging.error(f"Erro ao buscar alvos: Status {response.status_code} - {response.text}")
+            except requests.exceptions.RequestException as e:
+                logging.error(f"Erro de conexão ao buscar alvos: {e}")
+        time.sleep(15)
         
 def monitoring_loop():
-    """Loop principal de monitoramento com controle de intervalos"""
+    """Loop principal que executa as verificações e envia as métricas."""
     last_check = {}
     
     while True:
-        try:
-            print("\n" + "="*50)
-            print(f"Ciclo iniciado em: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+        # CORREÇÃO: A verificação agora é feita na variável 'agent_credentials'.
+        if not agent_credentials:
+            logging.info("Aguardando credenciais para iniciar o monitoramento...")
+            time.sleep(10)
+            continue # Pula para a próxima iteração do loop
             
-            # Verificar registro do agente
-            if not registered:
-                print("Agente não registrado, tentando novamente...")
-                register_agent()
-                time.sleep(5)
-                continue
-                
-            # Verificar existência de monitores
-            if not targets:
-                print("Nenhum monitor definido, aguardando...")
-                time.sleep(10)
-                continue
-                
-            print(f"Monitores cadastrados: {len(targets)}")
-            metrics = []
-            
-            # Processar cada monitor
-            for monitor in targets:
+        metrics = []
+        # O lock aqui previne que a lista de targets seja alterada enquanto o loop a percorre
+        with credentials_lock:
+            current_targets = list(targets)
+
+        for monitor in current_targets:
+            try:
                 monitor_id = monitor['id']
-                try:
-                    # Calcular intervalo
-                    check_interval = monitor['parameters'].get('check_time', 60)
-                    last_time = last_check.get(monitor_id, 0)
-                    
-                    if (time.time() - last_time) < check_interval:
-                        print(f"Monitor {monitor['monitor_name']} ({monitor_id}) aguardando próximo ciclo ({check_interval}s)")
-                        continue
-                        
-                    print(f"\n=== INICIANDO VERIFICAÇÃO [{monitor['monitor_name']}] ===")
-                    
-                    # Executar verificação
+                # Garante que 'parameters' e 'check_time' existam com um valor padrão
+                params = monitor.get('parameters', {})
+                check_interval = int(params.get('check_time', 60))
+                
+                if (time.time() - last_check.get(monitor_id, 0)) >= check_interval:
+                    logging.info(f"Executando monitor: {monitor.get('monitor_name', 'N/A')}")
                     result = process_monitor(monitor)
                     
-                    # Coletar métricas
                     metrics.append({
                         'monitor_id': monitor_id,
                         'success': result['success'],
                         'response_time': result['response_time'],
                         'raw_result': result.get('raw_result')
                     })
-                    
-                    # Atualizar último check
                     last_check[monitor_id] = time.time()
-                    print(f"Verificação completa. Próximo check em {check_interval}s")
-                    
-                except Exception as e:
-                    print(f"Erro crítico no monitor {monitor_id}: {str(e)}")
-                    metrics.append({
-                        'monitor_id': monitor_id,
-                        'success': 0,
-                        'response_time': 0,
-                        'raw_result': f"Erro de processamento: {str(e)}"
-                    })
+            except Exception as e:
+                logging.error(f"Erro no loop do monitor {monitor.get('id')}: {e}")
 
-            # Enviar métricas coletadas
-            if metrics:
-                print("\nEnviando métricas para o servidor central...")
+        if metrics:
+            headers = get_auth_headers()
+            if headers:
                 try:
-                    hashed_agent_id = hash_agent_name(os.environ['AGENT_NAME'], SALT)
-                    response = requests.post(
-                        f"{os.environ['CENTRAL_SERVER_URL']}/metrics",
-                        json={'agent_id': hashed_agent_id, 'metrics': metrics},
+                    logging.info(f"Enviando {len(metrics)} métricas...")
+                    send_request(
+                        'POST',
+                        '/metrics',
+                        json={'metrics': metrics},
                         timeout=10
                     )
-                    response.raise_for_status()
-                    
-                    print(f"Status do envio: {response.status_code}")
                 except Exception as e:
-                    print(f"Falha no envio de métricas: {str(e)}")
-            
-        except Exception as e:
-            print(f"ERRO GLOBAL NO LOOP: {str(e)}")
+                    logging.error(f"Falha no envio de métricas: {e}")
         
-        # Intervalo entre ciclos completos
-        time.sleep(1)
+        time.sleep(1) # Intervalo curto entre os ciclos de verificação
 
 if __name__ == '__main__':
-    register_agent()
-    Thread(target=send_heartbeat, daemon=True).start()
-    Thread(target=update_targets, daemon=True).start()
-    Thread(target=monitoring_loop, daemon=True).start()
-    while True:
-        time.sleep(15)
+    if not CENTRAL_SERVER_URL:
+        logging.critical("Variável de ambiente CENTRAL_SERVER_URL não definida. Encerrando.")
+    else:
+        # Tenta carregar credenciais. Se não conseguir, tenta registrar.
+        if load_credentials() or register_agent():
+            logging.info("Agente pronto para operar. Iniciando threads de background.")
+            Thread(target=send_heartbeat, daemon=True).start()
+            Thread(target=update_targets, daemon=True).start()
+            monitoring_loop() # Inicia o loop principal
+        else:
+            logging.critical("Não foi possível obter credenciais após várias tentativas. O agente será encerrado.")
