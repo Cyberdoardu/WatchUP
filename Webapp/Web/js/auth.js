@@ -12,8 +12,8 @@
 
     // Tenta validar o token com o backend
     try {
-        // CORREÇÃO CRÍTICA: O caminho para o endpoint de verificação deve ser absoluto a partir da raiz.
-        const response = await fetch('/php/auth-check.php', {
+        // CORRIGIDO: A chamada agora é um endpoint do gateway
+        const response = await fetch('/php/api-gateway.php?endpoint=auth-check', {
             method: 'POST',
             headers: {
                 'Authorization': `Bearer ${token}`
@@ -34,7 +34,7 @@
         }
 
     } catch (error) {
-        // Se a validação falhar por qualquer motivo (token expirado, 404, etc.), limpa e redireciona
+        // Se a validação falhar por qualquer motivo (token expirado, 401, etc.), limpa e redireciona
         console.error('Falha na verificação de autenticação:', error);
         localStorage.removeItem('jwt_token');
         if (!window.location.pathname.endsWith('login.html')) {
@@ -47,21 +47,20 @@
 function populateNavbar(userData) {
     const navbar = document.querySelector('.flex.flex-wrap.gap-4.border-b');
     if (navbar) {
-        const placeholder = navbar.querySelector('#nav-user-placeholder');
-        if(placeholder) placeholder.remove();
-
-        const usernameDisplay = document.createElement('span');
-        usernameDisplay.className = 'font-medium text-gray-700 ml-auto self-center';
-        usernameDisplay.textContent = `Olá, ${userData.username}`;
-
-        const logoutButton = document.createElement('a');
-        logoutButton.href = '/php/logout.php'; // Link direto
-        logoutButton.id = 'logoutBtn';
-        logoutButton.className = 'font-medium text-red-500 hover:text-red-700 self-center';
-        logoutButton.textContent = 'Logout';
+        // Adicionado um placeholder no HTML para ser substituído, ou cria os elementos se não existir
+        const userContainer = navbar.querySelector('#nav-user-container') || document.createElement('div');
+        userContainer.id = 'nav-user-container';
+        userContainer.className = 'ml-auto flex items-center gap-4';
         
-        navbar.appendChild(usernameDisplay);
-        navbar.appendChild(logoutButton);
+        userContainer.innerHTML = `
+            <span class="font-medium text-gray-700 self-center">Olá, ${userData.username}</span>
+            <a href="/php/logout.php" id="logoutBtn" class="font-medium text-red-500 hover:text-red-700 self-center">Logout</a>
+        `;
+        
+        // Garante que o container é filho da navbar
+        if (!navbar.contains(userContainer)) {
+             navbar.appendChild(userContainer);
+        }
     }
 }
 

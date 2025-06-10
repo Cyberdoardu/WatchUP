@@ -111,6 +111,7 @@ function authenticateRequest() {
     if (!$secretKey) {
         http_response_code(500);
         header('Content-Type: application/json');
+        error_log("Erro Crítico: Segredo JWT não está configurado nas variáveis de ambiente do contêiner webapp.");
         echo json_encode(['status' => 'error', 'message' => 'Erro Interno do Servidor: Segredo JWT não configurado.']);
         exit;
     }
@@ -121,7 +122,7 @@ function authenticateRequest() {
     } catch (Exception $e) { 
         http_response_code(401);
         header('Content-Type: application/json');
-        echo json_encode(['status' => 'error', 'message' => 'Não autorizado: Token inválido ou expirado.']);
+        echo json_encode(['status' => 'error', 'message' => 'Não autorizado: ' . $e->getMessage()]);
         exit;
     }
 }
@@ -181,28 +182,26 @@ function forwardRequest($url, $method, $data = null) {
 
 // --- INÍCIO DA LÓGICA DE ROTEAMENTO ---
 
-// 1. DETERMINAR A ROTA
 $effectivePath = '/' . trim($_GET['endpoint'] ?? '', '/');
 $method = $_SERVER['REQUEST_METHOD'];
 
-// 2. DEFINIR QUAIS ROTAS SÃO PROTEGIDAS E QUAIS SÃO ENCAMINHADAS
+// ADICIONADO: Nova rota para verificação de autenticação
 $jwtProtectedUserRoutes = [
     '/monitors',    
     '/agents',
-    '/report_data'
+    '/report_data',
+    '/auth-check' // <-- Rota adicionada aqui
 ];
 
 $centralServerForwardRoutes = [
-    '/monitors', // POST para criar é encaminhado
-    '/agents'    // GET para listar é encaminhado
+    '/monitors', 
+    '/agents'    
 ];
 
-// 3. VERIFICAR AUTENTICAÇÃO PRIMEIRO
 if (in_array($effectivePath, $jwtProtectedUserRoutes)) {
     $user_payload = authenticateRequest();
 }
 
-// 4. PROCESSAR A ROTA
 $requestData = null;
 if (in_array($method, ['POST', 'PUT', 'PATCH'])) {
     $input = file_get_contents('php://input');
@@ -216,7 +215,18 @@ if (in_array($method, ['POST', 'PUT', 'PATCH'])) {
     }
 }
 
-// Roteamento local para o ReportHandler (apenas GET)
+// ADICIONADO: Lógica para o novo endpoint
+if ($method === 'POST' && $effectivePath === '/auth-check') {
+    // A autenticação já foi feita e passou se chegamos aqui.
+    // A variável $user_payload contém os dados do usuário.
+    http_response_code(200);
+    echo json_encode([
+        'status' => 'success',
+        'user' => $user_payload
+    ]);
+    exit;
+}
+
 if ($method === 'GET' && $effectivePath === '/monitors') {
     $handler = new ReportHandler();
     $handler->handleGetMonitors();
@@ -228,7 +238,6 @@ if ($method === 'GET' && $effectivePath === '/report_data') {
     exit;
 }
 
-// Encaminhamento para o Central Server
 if (in_array($effectivePath, $centralServerForwardRoutes)) {
     $centralApiUrl = getenv('CENTRAL_API_URL') ?: 'http://central-server:5000';
     $urlForForwarding = $centralApiUrl . $effectivePath;
@@ -236,7 +245,6 @@ if (in_array($effectivePath, $centralServerForwardRoutes)) {
     exit;
 }
 
-// 5. SE NENHUMA ROTA CORRESPONDER
 http_response_code(404);    
 echo json_encode(['status' => 'error', 'message' => 'Endpoint não encontrado no gateway.', 'requested_path' => $effectivePath]);
 ?>
