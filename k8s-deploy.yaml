@@ -105,16 +105,21 @@ spec:
             - containerPort: 5000
           env:
             - name: DB_HOST
-              value: "mariadb" # <<< CORRIGIDO: Voltando ao nome simples do serviço
+              value: "mariadb"
             - name: DB_NAME
               value: "watchup"
             - name: DB_USER
               value: "watchuser"
             - name: DB_PASSWORD
               value: "watchpassword"
+            # --- CORREÇÃO ADICIONADA AQUI ---
+            - name: JWT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: jwt-secret
+                  key: JWT_SECRET
 ---
 # --- Central Server Service (Externo) ---
-# Mantido como LoadBalancer para acesso direto à API, se necessário
 apiVersion: v1
 kind: Service
 metadata:
@@ -155,7 +160,7 @@ spec:
           imagePullPolicy: IfNotPresent
           env:
             - name: CENTRAL_SERVER_URL
-              value: "http://central-server:5000" # <<< CORRIGIDO: Voltando ao nome simples do serviço
+              value: "http://central-server:5000"
             - name: AGENT_NAME
               value: "agent-01"
             - name: CHECK_INTERVAL
@@ -185,7 +190,13 @@ spec:
           imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 80
-
+          # --- CORREÇÃO ADICIONADA AQUI ---
+          env:
+            - name: JWT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: jwt-secret
+                  key: JWT_SECRET
 ---
 # --- Webapp Service (MODIFICADO para ClusterIP) ---
 apiVersion: v1
