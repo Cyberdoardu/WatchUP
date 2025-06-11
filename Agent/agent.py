@@ -10,6 +10,7 @@ from flask import Flask, request, jsonify
 import logging
 from datetime import datetime
 import json
+from collections import deque
 logging.basicConfig(level=logging.INFO)
 
 targets = []
@@ -19,6 +20,10 @@ CREDENTIALS_PATH = '/credentials/credentials.json'
 CENTRAL_SERVER_URL = os.environ.get('CENTRAL_SERVER_URL')
 
 SALT = "salzinho_pra_dar_g0st0"
+
+# --- Fila para Métricas
+metrics_queue = deque()
+queue_lock = Lock()
 
 
 # --- Lógica de Credenciais ---
@@ -244,7 +249,7 @@ def update_targets():
         time.sleep(15)
         
 def monitoring_loop():
-    """Loop principal que executa as verificações e envia as métricas."""
+    """Loop principal que executa as verificações, enfileira e envia as métricas."""
     last_check = {}
     
     while True:
@@ -253,7 +258,7 @@ def monitoring_loop():
             time.sleep(10)
             continue
             
-        metrics = []
+        new_metrics = []
         with credentials_lock:
             current_targets = list(targets)
 
@@ -267,8 +272,10 @@ def monitoring_loop():
                     logging.info(f"Executando monitor: {monitor.get('monitor_name', 'N/A')}")
                     result = process_monitor(monitor)
                     
-                    metrics.append({
+                    # Adiciona o timestamp no momento da coleta
+                    new_metrics.append({
                         'monitor_id': monitor_id,
+                        'timestamp': datetime.now().isoformat(),
                         'success': result['success'],
                         'response_time': result['response_time'],
                         'raw_result': result.get('raw_result')
@@ -277,22 +284,42 @@ def monitoring_loop():
             except Exception as e:
                 logging.error(f"Erro no loop do monitor {monitor.get('id')}: {e}")
 
-        if metrics:
+        # Adiciona as novas métricas à fila principal
+        if new_metrics:
+            with queue_lock:
+                metrics_queue.extend(new_metrics)
+                logging.info(f"Adicionado {len(new_metrics)} novas métricas à fila. Tamanho atual: {len(metrics_queue)}")
+
+        # Se a fila não estiver vazia, tenta enviar os dados
+        if metrics_queue:
             headers = get_auth_headers()
             if headers:
+                metrics_to_send = []
+                with queue_lock:
+                    metrics_to_send = list(metrics_queue) # Cria uma cópia para o envio
+
                 try:
-                    logging.info(f"Enviando {len(metrics)} métricas...")
-                    # ALTERADO: A chamada à função 'send_request' foi substituída por uma chamada direta a 'requests.post'.
-                    requests.post(
+                    logging.info(f"Tentando enviar {len(metrics_to_send)} métricas da fila...")
+                    response = requests.post(
                         f"{CENTRAL_SERVER_URL}/metrics",
                         headers=headers,
-                        json={'metrics': metrics},
+                        json={'metrics': metrics_to_send},
                         timeout=10
                     )
+                    response.raise_for_status() # Lança exceção para respostas 4xx/5xx
+
+                    # Se o envio foi bem-sucedido, remove os itens enviados da fila
+                    with queue_lock:
+                        for _ in range(len(metrics_to_send)):
+                            metrics_queue.popleft()
+                    logging.info(f"Envio de {len(metrics_to_send)} métricas bem-sucedido. Fila agora com {len(metrics_queue)} itens.")
+
                 except Exception as e:
-                    logging.error(f"Falha no envio de métricas: {e}")
+                    # Em caso de falha, os itens permanecem na fila
+                    logging.error(f"Falha no envio de métricas: {e}. As métricas permanecem na fila ({len(metrics_queue)} itens).")
         
         time.sleep(1)
+
 
 if __name__ == '__main__':
     if not CENTRAL_SERVER_URL:

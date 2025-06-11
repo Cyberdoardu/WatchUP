@@ -425,10 +425,9 @@ def update_monitor_status(conn, cursor, monitor_id, response_time, success):
 
 @app.route('/metrics', methods=['POST'])
 @agent_api_key_required
-def receive_metrics(agent_id): # ALTERADO: A função agora recebe 'agent_id' como um parâmetro vindo do decorator.
+def receive_metrics(agent_id):
     try:
         data = request.json
-        # ALTERADO: A verificação de 'agent_id' no corpo foi removida e substituída pela verificação de 'metrics'.
         if 'metrics' not in data:
             return jsonify({'error': "Campos 'metrics' faltando"}), 400
 
@@ -437,10 +436,14 @@ def receive_metrics(agent_id): # ALTERADO: A função agora recebe 'agent_id' co
         
         values = []
         for metric in data['metrics']:
+            # Validação do novo campo 'timestamp'
+            if 'timestamp' not in metric:
+                return jsonify({'error': "Campo 'timestamp' faltando em uma das métricas"}), 400
+            
             values.append((
                 metric['monitor_id'],
-                agent_id,  # ALTERADO: Utiliza o agent_id seguro passado como parâmetro.
-                datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f'),
+                agent_id,
+                metric['timestamp'],  # UTILIZA O TIMESTAMP VINDO DO AGENTE
                 metric.get('response_time'),
                 metric['success'],
                 metric.get('raw_result', '')
@@ -463,14 +466,15 @@ def receive_metrics(agent_id): # ALTERADO: A função agora recebe 'agent_id' co
         return jsonify({'status': 'received', 'count': len(values)})
         
     except Error as e:
-        if conn:
+        if conn and conn.is_connected():
             conn.rollback()
         return jsonify({'error': str(e)}), 500
     except Exception as e:
         return jsonify({'error': str(e)}), 400
     finally:
         if conn and conn.is_connected():
-            cursor.close()
+            if cursor:
+                cursor.close()
             conn.close()
 
 @app.route('/metrics', methods=['GET'])
