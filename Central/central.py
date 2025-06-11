@@ -369,67 +369,51 @@ def count_consecutive_failures(cursor, monitor_id):
     return cursor.fetchone()[0]
 
 def update_monitor_status(conn, cursor, monitor_id, response_time, success):
-    """Updates the monitor status based on response time and success rate."""
+    """Atualiza o status do monitor com base no tempo de resposta e sucesso."""
     try:
+        # Busca a configuração do monitor
         cursor.execute("""
-            SELECT failure_threshold_downtime, failure_threshold_partial_degradation,
-                   response_time_threshold_degraded, response_time_threshold_critical
+            SELECT failure_threshold_downtime, response_time_threshold_degraded
             FROM monitors WHERE id = %s
         """, (monitor_id,))
         monitor_config = cursor.fetchone()
 
-        if monitor_config is None:
-            app.logger.error(f"Monitor config not found for ID: {monitor_id}")
+        if not monitor_config:
+            app.logger.error(f"Configuração do monitor não encontrada para o ID: {monitor_id}")
             return
 
-        # Garante que valores nulos do banco se tornem 0 para comparação
-        (
-            failure_threshold_downtime,
-            failure_threshold_partial_degradation,
-            response_time_threshold_degraded,
-            response_time_threshold_critical,
-        ) = (val or 0 for val in monitor_config)
-        
+        # Define o status padrão
         current_status = "operational"
-        
-        if response_time is not None:
-            if response_time > response_time_threshold_critical:
-                current_status = "critical"
-            elif response_time > response_time_threshold_degraded:
-                current_status = "degraded"
 
+        # 1. Verifica falha crítica (success = 0)
         if success == 0:
-            # CORRIGIDO: A lógica para contar falhas consecutivas foi reescrita.
-            # Esta query busca o status das últimas N checagens (N = limite de downtime).
-            # Assim, evitamos buscar todo o histórico a cada falha.
-            query = """
-                SELECT success FROM (
-                    SELECT success FROM raw_data
+            current_status = "critical"
+        # 2. Se não for crítico, verifica se está degradado por lentidão
+        elif response_time is not None:
+            # Busca a média de tempo de resposta das últimas 30 checagens
+            cursor.execute("""
+                SELECT AVG(response_time) as avg_response 
+                FROM (
+                    SELECT response_time FROM raw_data
                     WHERE monitor_id = %s
                     ORDER BY timestamp DESC
-                    LIMIT %s
+                    LIMIT 30
                 ) as recent_checks;
-            """
-            cursor.execute(query, (monitor_id, failure_threshold_downtime))
+            """, (monitor_id,))
+            avg_response_data = cursor.fetchone()
             
-            recent_checks = cursor.fetchall()
-            consecutive_failures = 0
-            # Itera sobre os resultados buscados para contar as falhas.
-            for check in recent_checks:
-                if check[0] == 0: # check[0] é o campo 'success'
-                    consecutive_failures += 1
-                else:
-                    # Se encontrarmos um sucesso, a sequência de falhas é quebrada.
-                    break
-            
-            if consecutive_failures >= failure_threshold_downtime:
-                current_status = "downtime"
-            elif consecutive_failures >= failure_threshold_partial_degradation:
-                current_status = "partially_degraded"
+            # Garante que temos um valor para comparar
+            avg_response_time = avg_response_data[0] if avg_response_data else 0
 
-        cursor.execute("""
-            UPDATE monitors SET current_status = %s WHERE id = %s
-        """, (current_status, monitor_id))
+            if avg_response_time > monitor_config[1]: # monitor_config[1] é response_time_threshold_degraded
+                current_status = "degraded"
+        
+        # Atualiza o status no banco de dados
+        cursor.execute("UPDATE monitors SET current_status = %s WHERE id = %s", (current_status, monitor_id))
+
+    except Error as e:
+        app.logger.error(f"Erro ao atualizar o status do monitor: {e}")
+        raise
         
 
     except Error as e:
