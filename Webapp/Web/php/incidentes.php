@@ -67,23 +67,33 @@ if ($method === 'POST' && $action === 'delete') {
 
 // POST?action=updateState: atualizar estado
 if ($method === 'POST' && $action === 'updateState') {
-    $d = getInput();
-    $id  = intval($d['id'] ?? 0);
-    $est = $db->real_escape_string($d['estado'] ?? '');
-    if ($id<=0 || !$est) {
-      http_response_code(400);
-      echo json_encode(["sucesso"=>false,"mensagem"=>"Dados inválidos"]);
-      exit;
-    }
-    $stmt = $db->prepare("UPDATE incidentes SET estado_atual=? WHERE id=?");
-    $stmt->bind_param("si",$est,$id);
-    if($stmt->execute()){
-      echo json_encode(["sucesso"=>true]);
-    } else {
-      http_response_code(500);
-      echo json_encode(["sucesso"=>false,"mensagem"=>"Erro ao atualizar estado"]);
-    }
+  $d = getInput();
+  $id  = intval($d['id'] ?? 0);
+  $est = $db->real_escape_string($d['estado'] ?? '');
+  if ($id<=0 || !$est) {
+    http_response_code(400);
+    echo json_encode(["sucesso"=>false,"mensagem"=>"Dados inválidos"]);
     exit;
+  }
+
+  $stmt = null;
+  // Se o estado for 'Resolvido', atualiza também a data de resolução.
+  if ($est === 'Resolvido') {
+      $stmt = $db->prepare("UPDATE incidentes SET estado_atual=?, resolvido_em=NOW() WHERE id=?");
+      $stmt->bind_param("si", $est, $id);
+  } else {
+      // Caso contrário, apenas atualiza o estado e garante que a data de resolução fique nula.
+      $stmt = $db->prepare("UPDATE incidentes SET estado_atual=?, resolvido_em=NULL WHERE id=?");
+      $stmt->bind_param("si", $est, $id);
+  }
+
+  if($stmt->execute()){
+    echo json_encode(["sucesso"=>true]);
+  } else {
+    http_response_code(500);
+    echo json_encode(["sucesso"=>false,"mensagem"=>"Erro ao atualizar estado"]);
+  }
+  exit;
 }
 
 http_response_code(405);
