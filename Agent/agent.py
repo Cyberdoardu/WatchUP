@@ -226,7 +226,10 @@ def send_heartbeat():
         time.sleep(30)
 
 def update_targets():
-    """Busca a lista de monitores (alvos) do servidor central."""
+    """
+    Busca a lista de monitores (alvos) do servidor central.
+    Mantém a lista atual em cache em caso de falha na comunicação ou resposta vazia.
+    """
     global targets
     while True:
         headers = get_auth_headers()
@@ -238,20 +241,40 @@ def update_targets():
                     headers=headers,
                     timeout=10
                 )
-                if response.ok:
-                    with credentials_lock:
-                        targets = response.json() or []
-                    logging.info(f"{len(targets)} alvos recebidos.")
+                response.raise_for_status()  # Lança exceção para status 4xx/5xx
+
+                new_targets = response.json()
+
+                # Apenas atualiza se a resposta for uma lista (segurança extra)
+                if isinstance(new_targets, list):
+                    # Se a nova lista não estiver vazia, atualiza o cache em memória
+                    if new_targets:
+                        with credentials_lock:
+                            targets = new_targets
+                        logging.info(f"{len(targets)} alvos recebidos e atualizados.")
+                    # Se a resposta for uma lista vazia, mantém os alvos antigos
+                    else:
+                        logging.info("Recebida lista de 0 alvos. O agente continuará monitorando os "
+                                     f"{len(targets)} alvos que estão em cache.")
                 else:
-                    logging.error(f"Erro ao buscar alvos: Status {response.status_code} - {response.text}")
+                    logging.warning(f"Resposta de /targets não era uma lista. Mantendo alvos em cache. "
+                                    f"Resposta recebida: {new_targets}")
+
             except requests.exceptions.RequestException as e:
-                logging.error(f"Erro de conexão ao buscar alvos: {e}")
+                # Em caso de erro de conexão, o agente continua com os alvos que já tem
+                logging.error(f"Erro de conexão ao buscar alvos: {e}. O agente continuará monitorando os "
+                              f"{len(targets)} alvos em cache.")
+            except Exception as e:
+                # Captura outras exceções (ex: erro de decodificação JSON)
+                logging.error(f"Erro inesperado ao atualizar alvos: {e}. Mantendo alvos em cache.")
+
         time.sleep(15)
         
 def monitoring_loop():
     """Loop principal que executa as verificações, enfileira e envia as métricas."""
     last_check = {}
-    
+    send_attempt_counter = 1 # Contador para as tentativas de envio
+
     while True:
         if not agent_credentials:
             logging.info("Aguardando credenciais para iniciar o monitoramento...")
@@ -272,7 +295,6 @@ def monitoring_loop():
                     logging.info(f"Executando monitor: {monitor.get('monitor_name', 'N/A')}")
                     result = process_monitor(monitor)
                     
-                    # Adiciona o timestamp no momento da coleta
                     new_metrics.append({
                         'monitor_id': monitor_id,
                         'timestamp': datetime.now().isoformat(),
@@ -284,39 +306,50 @@ def monitoring_loop():
             except Exception as e:
                 logging.error(f"Erro no loop do monitor {monitor.get('id')}: {e}")
 
-        # Adiciona as novas métricas à fila principal
         if new_metrics:
             with queue_lock:
                 metrics_queue.extend(new_metrics)
                 logging.info(f"Adicionado {len(new_metrics)} novas métricas à fila. Tamanho atual: {len(metrics_queue)}")
 
-        # Se a fila não estiver vazia, tenta enviar os dados
         if metrics_queue:
             headers = get_auth_headers()
             if headers:
                 metrics_to_send = []
                 with queue_lock:
-                    metrics_to_send = list(metrics_queue) # Cria uma cópia para o envio
+                    metrics_to_send = list(metrics_queue)
 
                 try:
-                    logging.info(f"Tentando enviar {len(metrics_to_send)} métricas da fila...")
+                    # Log da tentativa de envio
+                    logging.info(f"Tentando enviar {len(metrics_to_send)} métricas da fila... (Tentativa #{send_attempt_counter})")
+                    
                     response = requests.post(
                         f"{CENTRAL_SERVER_URL}/metrics",
                         headers=headers,
                         json={'metrics': metrics_to_send},
                         timeout=10
                     )
-                    response.raise_for_status() # Lança exceção para respostas 4xx/5xx
+                    response.raise_for_status()
 
-                    # Se o envio foi bem-sucedido, remove os itens enviados da fila
+                    # Em caso de sucesso, limpa a fila e reseta o contador
                     with queue_lock:
                         for _ in range(len(metrics_to_send)):
                             metrics_queue.popleft()
                     logging.info(f"Envio de {len(metrics_to_send)} métricas bem-sucedido. Fila agora com {len(metrics_queue)} itens.")
+                    send_attempt_counter = 1 # Reseta o contador
 
                 except Exception as e:
-                    # Em caso de falha, os itens permanecem na fila
-                    logging.error(f"Falha no envio de métricas: {e}. As métricas permanecem na fila ({len(metrics_queue)} itens).")
+                    # Em caso de falha, exibe o erro e os itens da fila
+                    logging.error(f"Falha na tentativa #{send_attempt_counter} de envio: {e}.")
+                    
+                    with queue_lock:
+                        queue_size = len(metrics_queue)
+                        preview_items = list(metrics_queue)[:5] # Pega os 5 primeiros itens
+                    
+                    logging.info(f"As {queue_size} métricas permanecem na fila. Amostra dos 5 primeiros itens:")
+                    for i, item in enumerate(preview_items):
+                        logging.info(f"  Item {i+1}: {json.dumps(item)}")
+
+                    send_attempt_counter += 1 # Incrementa o contador para a próxima tentativa
         
         time.sleep(1)
 
