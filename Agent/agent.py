@@ -248,21 +248,18 @@ def monitoring_loop():
     last_check = {}
     
     while True:
-        # CORREÇÃO: A verificação agora é feita na variável 'agent_credentials'.
         if not agent_credentials:
             logging.info("Aguardando credenciais para iniciar o monitoramento...")
             time.sleep(10)
-            continue # Pula para a próxima iteração do loop
+            continue
             
         metrics = []
-        # O lock aqui previne que a lista de targets seja alterada enquanto o loop a percorre
         with credentials_lock:
             current_targets = list(targets)
 
         for monitor in current_targets:
             try:
                 monitor_id = monitor['id']
-                # Garante que 'parameters' e 'check_time' existam com um valor padrão
                 params = monitor.get('parameters', {})
                 check_interval = int(params.get('check_time', 60))
                 
@@ -285,16 +282,17 @@ def monitoring_loop():
             if headers:
                 try:
                     logging.info(f"Enviando {len(metrics)} métricas...")
-                    send_request(
-                        'POST',
-                        '/metrics',
+                    # ALTERADO: A chamada à função 'send_request' foi substituída por uma chamada direta a 'requests.post'.
+                    requests.post(
+                        f"{CENTRAL_SERVER_URL}/metrics",
+                        headers=headers,
                         json={'metrics': metrics},
                         timeout=10
                     )
                 except Exception as e:
                     logging.error(f"Falha no envio de métricas: {e}")
         
-        time.sleep(1) # Intervalo curto entre os ciclos de verificação
+        time.sleep(1)
 
 if __name__ == '__main__':
     if not CENTRAL_SERVER_URL:

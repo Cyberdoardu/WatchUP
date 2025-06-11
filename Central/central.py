@@ -441,12 +441,12 @@ def update_monitor_status(conn, cursor, monitor_id, response_time, success):
 
 @app.route('/metrics', methods=['POST'])
 @agent_api_key_required
-def receive_metrics():
+def receive_metrics(agent_id): # ALTERADO: A função agora recebe 'agent_id' como um parâmetro vindo do decorator.
     try:
         data = request.json
-        required_fields = ['agent_id', 'metrics']
-        if not all(field in data for field in required_fields):
-            return jsonify({'error': 'Campos obrigatórios faltando'}), 400
+        # ALTERADO: A verificação de 'agent_id' no corpo foi removida e substituída pela verificação de 'metrics'.
+        if 'metrics' not in data:
+            return jsonify({'error': "Campos 'metrics' faltando"}), 400
 
         conn = connection_pool.get_connection()
         cursor = conn.cursor()
@@ -455,7 +455,7 @@ def receive_metrics():
         for metric in data['metrics']:
             values.append((
                 metric['monitor_id'],
-                data['agent_id'],
+                agent_id,  # ALTERADO: Utiliza o agent_id seguro passado como parâmetro.
                 datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f'),
                 metric.get('response_time'),
                 metric['success'],
@@ -468,17 +468,14 @@ def receive_metrics():
             VALUES (%s, %s, %s, %s, %s, %s)
         """, values)
         
-        # CORREÇÃO: Loop movido para ANTES do 'return'
         for metric in data['metrics']:
             monitor_id = metric['monitor_id']
             response_time = metric.get('response_time')
             success = metric['success']
             
-            # Esta função agora será chamada corretamente
             update_monitor_status(conn, cursor, monitor_id, response_time, success)
 
         conn.commit()
-        # O 'return' agora fica no final, após todo o processamento.
         return jsonify({'status': 'received', 'count': len(values)})
         
     except Error as e:
