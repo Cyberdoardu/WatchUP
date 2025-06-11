@@ -9,6 +9,30 @@ document.addEventListener('DOMContentLoaded', () => {
   const list = document.getElementById('incidentList');
   const formError = document.getElementById('formError');
 
+  // ADICIONADO: Função para carregar monitores no dropdown
+  async function loadMonitors() {
+    try {
+        const servicoSelect = document.getElementById('servico');
+        const response = await fetch('php/get_monitors.php');
+        const data = await response.json();
+        
+        if (data.status === 'success' && data.data) {
+            servicoSelect.innerHTML = '<option value="">Selecione um monitor</option>';
+            data.data.forEach(monitor => {
+                const option = document.createElement('option');
+                option.value = monitor.monitor_name;
+                option.textContent = monitor.monitor_name;
+                servicoSelect.appendChild(option);
+            });
+        } else {
+            servicoSelect.innerHTML = '<option value="">Não foi possível carregar monitores</option>';
+        }
+    } catch (err) {
+        console.error("Erro ao carregar monitores:", err);
+        document.getElementById('servico').innerHTML = '<option value="">Erro ao carregar</option>';
+    }
+  }
+
   openBtn.addEventListener('click', () => {
     formError.textContent = '';
     modal.classList.remove('hidden');
@@ -131,7 +155,7 @@ document.addEventListener('DOMContentLoaded', () => {
       descricao: form.descricao.value.trim(),
       impacto: form.impacto.value,
       tipo: form.tipo.value,
-      servico: form.servico.value.trim()
+      servico: form.servico.value // Não precisa de .trim() para select
     };
     try {
       const res = await fetch(API, {
@@ -150,5 +174,6 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   });
 
+  loadMonitors();
   carregar();
 });

@@ -89,23 +89,61 @@ document.addEventListener('DOMContentLoaded', function () {
                 });
             }
 
-            // Se existirem incidentes ativos, o status geral se torna crítico
+            // ALTERADO: Lógica para renderizar incidentes ativos
             if (activeIncidents.length > 0) {
                 overallStatus = 'critical';
                 const incidentContainer = document.createElement('div');
-                incidentContainer.className = 'space-y-4 mb-6'; // Adicionado margin-bottom
-                incidentContainer.innerHTML = '<h3 class="text-xl font-semibold text-gray-800">Incidentes Ativos</h3>';
+                incidentContainer.className = 'space-y-4 mb-6';
+                incidentContainer.innerHTML = '<h3 class="text-xl font-semibold text-gray-800 mb-2">Incidentes Ativos</h3>';
                 
                 activeIncidents.forEach(incident => {
                     const incidentElement = document.createElement('div');
-                    incidentElement.className = 'bg-yellow-50 border-l-4 border-yellow-400 text-yellow-800 p-4';
+                    let cardClasses = 'p-4 rounded-lg border-l-4 ';
+                    let titleClasses = 'font-bold ';
+                    let impactText = '';
+                
+                    // Define a cor do card com base no impacto
+                    switch (incident.impacto) {
+                        case 'major':
+                            cardClasses += 'bg-red-50 border-red-500 text-red-800';
+                            titleClasses += 'text-red-900';
+                            impactText = 'Major Outage';
+                            break;
+                        case 'partial':
+                        case 'degraded':
+                            cardClasses += 'bg-yellow-50 border-yellow-500 text-yellow-800';
+                            titleClasses += 'text-yellow-900';
+                            impactText = 'Partial Outage / Degraded';
+                            break;
+                        default:
+                            cardClasses += 'bg-gray-100 border-gray-500 text-gray-800';
+                            titleClasses += 'text-gray-900';
+                            impactText = 'Informativo';
+                            break;
+                    }
+                    
+                    incidentElement.className = cardClasses;
+                    
+                    // Define a cor da pílula de estado
+                    const estado = incident.estado_atual || 'Identificado';
+                    const estadoClasses = estado === 'Identificado' 
+                        ? 'bg-red-100 text-red-800' 
+                        : 'bg-yellow-100 text-yellow-800';
+                
+                    // Monta o HTML final do card do incidente
                     incidentElement.innerHTML = `
-                        <p class="font-bold">${incident.titulo}</p>
-                        <p class="text-sm">${incident.descricao}</p>
+                        <div class="flex justify-between items-start">
+                            <div>
+                                <p class="${titleClasses}">${incident.titulo}</p>
+                                <p class="text-sm font-normal -mt-1">${impactText}</p>
+                            </div>
+                            <span class="text-xs font-semibold px-2 py-1 rounded-full ${estadoClasses}">${estado}</span>
+                        </div>
+                        <p class="text-sm mt-2">${incident.descricao}</p>
+                        <p class="text-sm mt-2 font-semibold">Serviço afetado: ${incident.servico || 'N/A'}</p>
                     `;
                     incidentContainer.appendChild(incidentElement);
                 });
-                // Adiciona os incidentes no topo da lista
                 monitorsList.prepend(incidentContainer);
             }
 
