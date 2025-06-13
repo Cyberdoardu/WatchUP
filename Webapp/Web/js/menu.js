@@ -17,13 +17,6 @@ document.addEventListener('DOMContentLoaded', function () {
             // Itera sobre cada monitor para criar seu elemento visual
             if (monitorData.data && monitorData.data.length > 0) {
                 monitorData.data.forEach(monitor => {
-                    // Determina o status geral com base no monitor de maior criticidade
-                    if (monitor.current_status === 'downtime' || monitor.current_status === 'critical') {
-                        overallStatus = 'critical';
-                    } else if (monitor.current_status === 'degraded' && overallStatus !== 'critical') {
-                        overallStatus = 'degraded';
-                    }
-
                     let slaSum = 0;
                     let slaCount = 0;
                     monitor.history_90_days.forEach(day => {
@@ -33,19 +26,44 @@ document.addEventListener('DOMContentLoaded', function () {
                             slaCount++;
                         }
                     });
-                    const ninetyDaySla = slaCount > 0 ? (slaSum / slaCount).toFixed(2) + '%' : 'N/A';
+
+                    // --- LÓGICA DE STATUS CORRIGIDA ---
+                    // 1. Calcula o SLA numérico e o texto para exibição
+                    const numericSla = slaCount > 0 ? (slaSum / slaCount) : 0;
+                    const ninetyDaySlaText = slaCount > 0 ? numericSla.toFixed(2) + '%' : 'N/A';
+                    
+                    // 2. Determina o status com base no SLA de 90 dias
+                    let ninetyDayStatus = 'operational';
+                    if (slaCount > 0) {
+                        if (numericSla < 99) {
+                            ninetyDayStatus = 'critical';
+                        } else if (numericSla < 99.9) {
+                            ninetyDayStatus = 'degraded';
+                        }
+                    } else {
+                        ninetyDayStatus = 'no data';
+                    }
+                    
+                    // 3. Usa o novo status calculado para o banner geral da página
+                    if (ninetyDayStatus === 'critical') {
+                        overallStatus = 'critical';
+                    } else if (ninetyDayStatus === 'degraded' && overallStatus !== 'critical') {
+                        overallStatus = 'degraded';
+                    }
+                    // --- FIM DA LÓGICA CORRIGIDA ---
+
                     // Cria o contêiner principal para o monitor
                     const monitorElement = document.createElement('div');
                     monitorElement.className = 'bg-white border rounded p-4 shadow-sm';
 
-                    // Cria o cabeçalho com o nome, o SLA de 90 dias e o status atual
+                    // Cria o cabeçalho com o nome, o SLA de 90 dias e o status ATUALIZADO
                     const header = document.createElement('div');
                     header.className = 'flex justify-between items-center mb-2';
                     header.innerHTML = `
                         <h3 class="text-lg font-semibold text-gray-800">${monitor.monitor_name}</h3>
                         <div class="flex items-center space-x-4">
-                             <span class="text-sm font-medium text-gray-500">Uptime: <span class="font-bold text-gray-800">${ninetyDaySla}</span></span>
-                             <span class="text-sm font-semibold capitalize text-gray-700">${(monitor.current_status || 'N/A').replace('_', ' ')}</span>
+                             <span class="text-sm font-medium text-gray-500">Uptime (90d): <span class="font-bold text-gray-800">${ninetyDaySlaText}</span></span>
+                             <span class="text-sm font-semibold capitalize text-gray-700">${ninetyDayStatus.replace('_', ' ')}</span>
                         </div>
                     `;
 
