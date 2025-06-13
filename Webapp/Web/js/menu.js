@@ -24,16 +24,29 @@ document.addEventListener('DOMContentLoaded', function () {
                         overallStatus = 'degraded';
                     }
 
+                    let slaSum = 0;
+                    let slaCount = 0;
+                    monitor.history_90_days.forEach(day => {
+                        // Considera apenas dias com dados de SLA válidos
+                        if (day.sla !== 'N/A' && isFinite(day.sla)) {
+                            slaSum += parseFloat(day.sla);
+                            slaCount++;
+                        }
+                    });
+                    const ninetyDaySla = slaCount > 0 ? (slaSum / slaCount).toFixed(2) + '%' : 'N/A';
                     // Cria o contêiner principal para o monitor
                     const monitorElement = document.createElement('div');
                     monitorElement.className = 'bg-white border rounded p-4 shadow-sm';
 
-                    // Cria o cabeçalho com o nome e o status atual
+                    // Cria o cabeçalho com o nome, o SLA de 90 dias e o status atual
                     const header = document.createElement('div');
                     header.className = 'flex justify-between items-center mb-2';
                     header.innerHTML = `
                         <h3 class="text-lg font-semibold text-gray-800">${monitor.monitor_name}</h3>
-                        <span class="text-sm font-semibold capitalize text-gray-700">${(monitor.current_status || 'N/A').replace('_', ' ')}</span>
+                        <div class="flex items-center space-x-4">
+                             <span class="text-sm font-medium text-gray-500">90-Day SLA: <span class="font-bold text-gray-800">${ninetyDaySla}</span></span>
+                             <span class="text-sm font-semibold capitalize text-gray-700">${(monitor.current_status || 'N/A').replace('_', ' ')}</span>
+                        </div>
                     `;
 
                     // Cria a linha do tempo para o histórico de 90 dias
@@ -89,7 +102,7 @@ document.addEventListener('DOMContentLoaded', function () {
                 });
             }
 
-            // ALTERADO: Lógica para renderizar incidentes ativos
+            // Lógica para renderizar incidentes ativos
             if (activeIncidents.length > 0) {
                 overallStatus = 'critical';
                 const incidentContainer = document.createElement('div');
