@@ -59,11 +59,9 @@ document.addEventListener('DOMContentLoaded', function () {
                         bar.className = 'flex-1 relative'; // `relative` para posicionar o tooltip
 
                         // Define a cor da barra com base no status do dia
-                        if (day.status === 'operational') {
+                        if (day.status === 'available') {
                             bar.classList.add('bg-green-500');
-                        } else if (day.status === 'degraded') {
-                            bar.classList.add('bg-yellow-500');
-                        } else if (day.status === 'critical') {
+                        } else if (day.status === 'unavailable') {
                             bar.classList.add('bg-red-500');
                         } else {
                             bar.classList.add('bg-gray-300');
