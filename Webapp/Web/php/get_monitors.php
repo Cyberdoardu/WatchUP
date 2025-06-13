@@ -32,9 +32,18 @@ if ($result->num_rows > 0) {
             $sla = 'N/A';
 
             if ($row_data['total'] > 0) {
-                // Calcula o SLA
-                $sla = number_format(($row_data['successes'] / $row_data['total']) * 100, 2);
-                $status = $sla == 100.00 ? 'available' : 'unavailable';
+                // Calcula o SLA com maior precisão
+                $sla_value = ($row_data['successes'] / $row_data['total']) * 100;
+                $sla = number_format($sla_value, 4); 
+
+                // Aplica a nova lógica de status baseada nos limites de SLA
+                if ($sla_value >= 99.9) {
+                    $status = 'operational';
+                } elseif ($sla_value >= 99) {
+                    $status = 'degraded';
+                } else {
+                    $status = 'critical';
+                }
             }
             
             $daily_history[] = ['status' => $status, 'sla' => $sla];
