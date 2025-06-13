@@ -47,22 +47,30 @@
 function populateNavbar(userData) {
     const navbar = document.querySelector('.flex.flex-wrap.gap-4.border-b');
     if (navbar) {
-        // Adicionado um placeholder no HTML para ser substituído, ou cria os elementos se não existir
         const userContainer = navbar.querySelector('#nav-user-container') || document.createElement('div');
         userContainer.id = 'nav-user-container';
         userContainer.className = 'ml-auto flex items-center gap-4';
         
         userContainer.innerHTML = `
             <span class="font-medium text-gray-700 self-center">Olá, ${userData.username}</span>
-            <a href="/php/logout.php" id="logoutBtn" class="font-medium text-red-500 hover:text-red-700 self-center">Logout</a>
+            <button id="logoutBtn" class="font-medium text-red-500 hover:text-red-700 self-center cursor-pointer">Logout</button>
         `;
         
-        // Garante que o container é filho da navbar
         if (!navbar.contains(userContainer)) {
              navbar.appendChild(userContainer);
         }
+
+        const logoutButton = document.getElementById('logoutBtn');
+        if (logoutButton) {
+            logoutButton.addEventListener('click', (e) => {
+                e.preventDefault();
+                localStorage.removeItem('jwt_token');
+                window.location.href = '/php/logout.php';
+            });
+        }
     }
 }
+
 
 // Função auxiliar para adicionar cabeçalhos de autenticação nas chamadas de API
 function getAuthHeaders() {
