@@ -44,7 +44,7 @@ document.addEventListener('DOMContentLoaded', function () {
                     header.innerHTML = `
                         <h3 class="text-lg font-semibold text-gray-800">${monitor.monitor_name}</h3>
                         <div class="flex items-center space-x-4">
-                             <span class="text-sm font-medium text-gray-500">90-Day SLA: <span class="font-bold text-gray-800">${ninetyDaySla}</span></span>
+                             <span class="text-sm font-medium text-gray-500">Uptime: <span class="font-bold text-gray-800">${ninetyDaySla}</span></span>
                              <span class="text-sm font-semibold capitalize text-gray-700">${(monitor.current_status || 'N/A').replace('_', ' ')}</span>
                         </div>
                     `;
