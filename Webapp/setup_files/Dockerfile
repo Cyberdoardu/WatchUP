@@ -1,4 +1,4 @@
-FROM php:8.2-apache
+FROM php:8.5.3RC1-apache
 
 # 1. Instalar dependências
 RUN apt-get update && \
